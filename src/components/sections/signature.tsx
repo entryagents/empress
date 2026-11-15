@@ -8,6 +8,7 @@ import { FoodImage } from "@/components/ui/food-image";
 
 import { SectionHeading } from "@/components/ui/section-heading";
 import { useCart } from "@/lib/cart-context";
+import { getProductBySlug } from "@/lib/catalogue/service";
 import { FILTER_EVENT } from "./categories";
 import { cn } from "@/lib/utils";
 
@@ -25,9 +26,17 @@ export function Signature() {
   }, []);
 
   const handleAddToCart = (product: Product) => {
-    addItem(product);
-    setAddedSlug(product.slug);
-    setTimeout(() => setAddedSlug(null), 1800);
+    // Locate full catalogue item from seed or runtime
+    const catProduct = getProductBySlug(product.slug);
+    if (catProduct) {
+      catProduct.then((p) => {
+        if (p) {
+          addItem(p);
+          setAddedSlug(product.slug);
+          setTimeout(() => setAddedSlug(null), 1800);
+        }
+      });
+    }
   };
 
   const list = filter === "all" ? products : products.filter((p) => p.category === filter);

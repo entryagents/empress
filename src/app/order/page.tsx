@@ -2,15 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Bike, Store, ShoppingBag, Plus, Minus, Trash2, CheckCircle2 } from "lucide-react";
+import Image from "next/image";
+import { ArrowLeft, Bike, Store, ShoppingBag, Plus, Minus, Trash2, CheckCircle2, Utensils } from "lucide-react";
 import { useCart } from "@/lib/cart-context";
-import { formatPrice, products } from "@/data/catalogue";
-import { FoodImage } from "@/components/ui/food-image";
+import { formatKobo } from "@/types/catalogue";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { ROUTES } from "@/config/site";
 
 export default function OrderPage() {
-  const { items, orderMode, setOrderMode, updateQuantity, removeItem, clearCart, addItem } = useCart();
+  const { items, orderMode, setOrderMode, updateQuantity, removeItem, clearCart, totalAmountKobo } = useCart();
   const [submitted, setSubmitted] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -36,7 +36,7 @@ export default function OrderPage() {
             Thank you, {formData.name || "Customer"}!
           </h1>
           <p className="mt-4 text-base leading-relaxed text-wine-800/80">
-            Your demonstration order for <strong>{orderMode}</strong> has been logged. In Phase 2, this connects directly to Bach&apos;s Payment API and live order fulfillment.
+            Your demonstration order for <strong>{orderMode}</strong> has been logged. In upcoming phases, this connects directly to payment gateways and live order fulfillment.
           </p>
 
           <div className="mt-8 rounded-[2px] border border-wine-900/10 bg-white p-6 text-left shadow-soft">
@@ -48,12 +48,26 @@ export default function OrderPage() {
             )}
             <ul className="mt-4 divide-y divide-wine-900/10 border-t border-wine-900/10 pt-3">
               {items.map((i) => (
-                <li key={i.product.slug} className="flex justify-between py-2 text-sm">
-                  <span>{i.quantity}x {i.product.name}</span>
-                  <span className="font-serif">{formatPrice(i.product.price)}</span>
+                <li key={i.id} className="flex justify-between py-2 text-sm">
+                  <div>
+                    <span className="font-medium text-wine-950">{i.quantity}x {i.product.name}</span>
+                    {i.variant && (
+                      <span className="block text-xs text-wine-600">Portion: {i.variant.name}</span>
+                    )}
+                    {i.addons && i.addons.length > 0 && (
+                      <span className="block text-xs text-champagne-700">
+                        Extras: {i.addons.map((a) => a.name).join(", ")}
+                      </span>
+                    )}
+                  </div>
+                  <span className="font-serif text-wine-950">{formatKobo(i.unitPriceKobo * i.quantity)}</span>
                 </li>
               ))}
             </ul>
+            <div className="mt-4 border-t border-wine-900/10 pt-3 flex justify-between font-serif text-base font-semibold text-wine-950">
+              <span>Total</span>
+              <span>{formatKobo(totalAmountKobo)}</span>
+            </div>
           </div>
 
           <div className="mt-8 flex justify-center gap-4">
@@ -130,28 +144,13 @@ export default function OrderPage() {
               No items in your bag yet
             </h2>
             <p className="mt-2 max-w-md mx-auto text-sm text-wine-800/80">
-              Select dishes below from our initial menu to add them to your order bag.
+              Explore our freshly updated digital menu to configure dishes, portion sizes, and custom culinary extras.
             </p>
 
-            <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-left">
-              {products.slice(0, 6).map((p) => (
-                <div
-                  key={p.slug}
-                  className="flex items-center justify-between gap-3 rounded border border-wine-900/10 p-3 hover:border-wine-900/30"
-                >
-                  <div className="min-w-0">
-                    <p className="font-serif text-sm font-medium truncate text-wine-950">{p.name}</p>
-                    <p className="text-xs text-wine-700 italic">{formatPrice(p.price)}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => addItem(p)}
-                    className="shrink-0 rounded bg-wine-900 px-3 py-1.5 text-xs font-semibold text-ivory-50 hover:bg-wine-800"
-                  >
-                    Add
-                  </button>
-                </div>
-              ))}
+            <div className="mt-8 flex justify-center">
+              <ButtonLink href="/menu" variant="primary" size="md">
+                Browse Full Menu
+              </ButtonLink>
             </div>
           </div>
         ) : (
@@ -173,67 +172,88 @@ export default function OrderPage() {
                 </div>
 
                 <ul className="divide-y divide-wine-900/10">
-                  {items.map(({ product, quantity }) => (
-                    <li key={product.slug} className="flex gap-4 py-5">
-                      <div className="relative size-20 shrink-0 overflow-hidden rounded bg-wine-950">
-                        <FoodImage name={product.image} sizes="80px" />
-                      </div>
-                      <div className="flex flex-1 flex-col justify-between">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <h3 className="font-serif text-lg font-medium text-wine-950">
-                              {product.name}
-                            </h3>
-                            <p className="text-xs text-wine-700 italic">
-                              {formatPrice(product.price)}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeItem(product.slug)}
-                            aria-label={`Remove ${product.name}`}
-                            className="text-wine-600 hover:text-red-600"
-                          >
-                            <Trash2 className="size-4" />
-                          </button>
+                  {items.map((item) => {
+                    const primaryImg =
+                      item.product.images?.find((img) => img.is_primary)?.image_url ||
+                      item.product.images?.[0]?.image_url ||
+                      "/images/food/shawarma.jpg";
+
+                    return (
+                      <li key={item.id} className="flex gap-4 py-5">
+                        <div className="relative size-20 shrink-0 overflow-hidden rounded bg-wine-950">
+                          <Image
+                            src={primaryImg}
+                            alt={item.product.name}
+                            fill
+                            className="object-cover"
+                            sizes="80px"
+                          />
                         </div>
 
-                        <div className="mt-3 flex items-center justify-between">
-                          <div className="flex items-center gap-2 rounded border border-wine-900/20 bg-ivory-50 px-2 py-0.5">
+                        <div className="flex flex-1 flex-col justify-between">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <h3 className="font-serif text-lg font-medium text-wine-950">
+                                {item.product.name}
+                              </h3>
+                              {item.variant && (
+                                <p className="text-xs text-wine-600">Portion: {item.variant.name}</p>
+                              )}
+                              {item.addons && item.addons.length > 0 && (
+                                <p className="text-xs text-champagne-700">
+                                  Extras: {item.addons.map((a) => a.name).join(", ")}
+                                </p>
+                              )}
+                              {item.specialInstructions && (
+                                <p className="text-[0.7rem] italic text-wine-600">
+                                  &ldquo;{item.specialInstructions}&rdquo;
+                                </p>
+                              )}
+                              <p className="mt-0.5 text-xs text-wine-700 italic">
+                                {formatKobo(item.unitPriceKobo)} each
+                              </p>
+                            </div>
                             <button
                               type="button"
-                              onClick={() => updateQuantity(product.slug, -1)}
-                              aria-label="Decrease quantity"
-                              className="text-wine-800 hover:text-wine-950"
+                              onClick={() => removeItem(item.id)}
+                              aria-label={`Remove ${item.product.name}`}
+                              className="text-wine-600 hover:text-red-600"
                             >
-                              <Minus className="size-3.5" />
+                              <Trash2 className="size-4" />
                             </button>
-                            <span className="w-6 text-center text-xs font-semibold">
-                              {quantity}
+                          </div>
+
+                          <div className="mt-3 flex items-center justify-between">
+                            <div className="flex items-center gap-2 rounded border border-wine-900/20 bg-ivory-50 px-2 py-0.5">
+                              <button
+                                type="button"
+                                onClick={() => updateQuantity(item.id, -1)}
+                                aria-label="Decrease quantity"
+                                className="text-wine-800 hover:text-wine-950"
+                              >
+                                <Minus className="size-3.5" />
+                              </button>
+                              <span className="w-6 text-center text-xs font-semibold">
+                                {item.quantity}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => updateQuantity(item.id, 1)}
+                                aria-label="Increase quantity"
+                                className="text-wine-800 hover:text-wine-950"
+                              >
+                                <Plus className="size-3.5" />
+                              </button>
+                            </div>
+
+                            <span className="text-xs font-semibold text-wine-950">
+                              {formatKobo(item.unitPriceKobo * item.quantity)}
                             </span>
-                            <button
-                              type="button"
-                              onClick={() => updateQuantity(product.slug, 1)}
-                              aria-label="Increase quantity"
-                              className="text-wine-800 hover:text-wine-950"
-                            >
-                              <Plus className="size-3.5" />
-                            </button>
                           </div>
-
-                          <span className="text-xs font-semibold text-wine-950">
-                            {product.price.amount
-                              ? new Intl.NumberFormat("en-NG", {
-                                  style: "currency",
-                                  currency: product.price.currency,
-                                  maximumFractionDigits: 0,
-                                }).format(product.price.amount * quantity)
-                              : "To be confirmed"}
-                          </span>
                         </div>
-                      </div>
-                    </li>
-                  ))}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             </div>
@@ -248,7 +268,7 @@ export default function OrderPage() {
                   {orderMode === "delivery" ? "Delivery Details" : "Pickup Information"}
                 </h2>
                 <p className="mt-1 text-xs text-wine-700">
-                  Phase 1 demonstration ordering workflow.
+                  Empress Delicacies ordering workflow.
                 </p>
 
                 <div className="mt-6 space-y-4">
@@ -325,14 +345,10 @@ export default function OrderPage() {
                   </div>
                   <div className="mt-4 flex items-baseline justify-between border-t border-wine-900/10 pt-3">
                     <span className="font-serif text-lg font-medium text-wine-950">
-                      Estimated Total
+                      Total Due
                     </span>
                     <span className="font-serif text-xl font-semibold text-wine-950">
-                      {new Intl.NumberFormat("en-NG", {
-                        style: "currency",
-                        currency: "NGN",
-                        maximumFractionDigits: 0,
-                      }).format(items.reduce((sum, i) => sum + (i.product.price.amount || 0) * i.quantity, 0))}
+                      {formatKobo(totalAmountKobo)}
                     </span>
                   </div>
                 </div>
@@ -346,7 +362,7 @@ export default function OrderPage() {
                   Confirm &amp; Place Order ({orderMode})
                 </Button>
                 <p className="mt-3 text-center text-[0.7rem] text-wine-700/80">
-                  Pre-launch demo flow · Real payment integration in Phase 2
+                  Empress Delicacies direct order intake
                 </p>
               </form>
             </div>

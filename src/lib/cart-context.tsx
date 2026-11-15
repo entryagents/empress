@@ -1,11 +1,24 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import type { Product } from "@/data/catalogue";
+import type { Product, ProductVariant, ProductAddon } from "@/types/catalogue";
+import { calculateItemPrice } from "@/types/catalogue";
 
 export interface CartItem {
+  id: string; // unique key combining product, variant and addons
   product: Product;
+  variant?: ProductVariant;
+  addons?: ProductAddon[];
+  specialInstructions?: string;
   quantity: number;
+  unitPriceKobo: number;
+}
+
+export interface AddItemOptions {
+  variant?: ProductVariant;
+  addons?: ProductAddon[];
+  specialInstructions?: string;
+  quantity?: number;
 }
 
 interface CartContextType {
@@ -15,16 +28,17 @@ interface CartContextType {
   setOrderMode: (mode: "delivery" | "pickup") => void;
   openCart: () => void;
   closeCart: () => void;
-  addItem: (product: Product) => void;
-  removeItem: (slug: string) => void;
-  updateQuantity: (slug: string, delta: number) => void;
+  addItem: (product: Product, options?: AddItemOptions) => void;
+  removeItem: (itemId: string) => void;
+  updateQuantity: (itemId: string, delta: number) => void;
   clearCart: () => void;
   totalCount: number;
+  totalAmountKobo: number;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
-const STORAGE_KEY = "empress_cart_v1";
+const STORAGE_KEY = "empress_cart_v2";
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>(() => {
@@ -48,28 +62,52 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, [items]);
 
-  const addItem = (product: Product) => {
+  const addItem = (product: Product, options?: AddItemOptions) => {
+    const variant = options?.variant;
+    const addons = options?.addons || [];
+    const instructions = options?.specialInstructions?.trim() || "";
+    const qty = options?.quantity && options.quantity > 0 ? options.quantity : 1;
+
+    const addonKey = addons
+      .map((a) => a.id)
+      .sort()
+      .join("_");
+    const itemKey = `${product.id || product.slug}-${variant?.id || "base"}-${addonKey || "none"}-${instructions ? encodeURIComponent(instructions.slice(0, 20)) : "clean"}`;
+
+    const unitPriceKobo = calculateItemPrice(product.base_price_kobo, variant, addons);
+
     setItems((prev) => {
-      const idx = prev.findIndex((i) => i.product.slug === product.slug);
+      const idx = prev.findIndex((i) => i.id === itemKey);
       if (idx >= 0) {
         const copy = [...prev];
-        copy[idx] = { ...copy[idx], quantity: copy[idx].quantity + 1 };
+        copy[idx] = { ...copy[idx], quantity: copy[idx].quantity + qty };
         return copy;
       }
-      return [...prev, { product, quantity: 1 }];
+      return [
+        ...prev,
+        {
+          id: itemKey,
+          product,
+          variant,
+          addons,
+          specialInstructions: instructions || undefined,
+          quantity: qty,
+          unitPriceKobo,
+        },
+      ];
     });
     setIsOpen(true);
   };
 
-  const removeItem = (slug: string) => {
-    setItems((prev) => prev.filter((i) => i.product.slug !== slug));
+  const removeItem = (itemId: string) => {
+    setItems((prev) => prev.filter((i) => i.id !== itemId && i.product.slug !== itemId));
   };
 
-  const updateQuantity = (slug: string, delta: number) => {
+  const updateQuantity = (itemId: string, delta: number) => {
     setItems((prev) => {
       return prev
         .map((item) => {
-          if (item.product.slug === slug) {
+          if (item.id === itemId || item.product.slug === itemId) {
             const nextQty = item.quantity + delta;
             return nextQty > 0 ? { ...item, quantity: nextQty } : null;
           }
@@ -82,6 +120,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const clearCart = () => setItems([]);
 
   const totalCount = items.reduce((sum, item) => sum + item.quantity, 0);
+  const totalAmountKobo = items.reduce((sum, item) => sum + item.unitPriceKobo * item.quantity, 0);
 
   return (
     <CartContext.Provider
@@ -97,6 +136,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         updateQuantity,
         clearCart,
         totalCount,
+        totalAmountKobo,
       }}
     >
       {children}
