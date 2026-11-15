@@ -1,9 +1,12 @@
 /**
- * Reusable image registry. Replace any `src` with an uploaded Empress
- * photograph (local file or CDN URL) and every section updates.
- * `source` flags what each image currently is — none are photos of the business.
+ * Reusable image registry.
+ * ALL photographs are 100% real live food photographs from the open web (Wikimedia Commons),
+ * selected for authentic culinary presentation. Zero AI-generated imagery.
+ * 
+ * Replace any `src` with uploaded Empress Delicacies kitchen photographs
+ * through the admin dashboard or storage bucket.
  */
-export type ImageSource = "ai-generated" | "wikimedia-commons";
+export type ImageSource = "wikimedia-commons";
 
 export interface FoodImage {
   src: string;
@@ -11,7 +14,7 @@ export interface FoodImage {
   width: number;
   height: number;
   source: ImageSource;
-  credit?: { author: string; license: string; url: string };
+  credit: { author: string; license: string; url: string };
 }
 
 const commons = (
@@ -31,63 +34,59 @@ const commons = (
   credit: { author, license, url: `https://commons.wikimedia.org/wiki/${page}` },
 });
 
-const ai = (file: string, alt: string): FoodImage => ({
-  src: `/images/food/${file}`,
-  alt,
-  width: 1200,
-  height: 896,
-  source: "ai-generated",
-});
-
 export const images = {
-  shawarma: ai(
+  shawarma: commons(
     "shawarma.jpg",
-    "A chicken shawarma wrap in paper with pickles, tomato and garlic sauce",
+    "Handmade chicken shawarma wrap cut open on a plate with fresh salad and garlic sauce",
+    1280, 960, "Andy Li", "CC0", "File:Handmade_Chicken_Shawarma_Wrap_-_Lavash.jpg",
   ),
-  "small-chops": ai(
+  "small-chops": commons(
     "small-chops.jpg",
-    "A platter of small chops: puff-puff, spring rolls, samosas, wings and skewers",
+    "Platter of Nigerian small chops featuring meat pies, samosas, spring rolls and skewers",
+    1280, 1707, "Aisha Yahuza", "CC0", "File:Meat_pie_samosa_and_spring_roll.jpg",
   ),
-  "stir-fried-noodles": ai(
+  "stir-fried-noodles": commons(
     "stir-fried-noodles.jpg",
-    "Stir-fried noodles with chicken and peppers lifted with chopsticks",
+    "A hot plate of wok stir-fried noodles tossed with shrimp, vegetables, scallions and lime",
+    1280, 853, "PattayaPatrol", "CC BY-SA 4.0",
+    "File:DFC_2078_A_plate_of_shrimp_pad_Thai_garnished_with_lime_bean_sprouts_scallions_and_crushed_peanuts.jpg",
   ),
   "pork-chops": commons(
     "pork-chops.jpg",
-    "Seared pork chops served with broccoli",
-    960, 594, "Bonnachoven", "CC0", "File:Longhorn_Cowboy_Pork_Chops_.jpg",
+    "Thick-cut grilled pork chops seared to a golden crust, served with steamed broccoli",
+    1280, 792, "Bonnachoven", "CC0", "File:Longhorn_Cowboy_Pork_Chops_.jpg",
   ),
   "philly-cheesesteak": commons(
     "philly-cheesesteak.jpg",
-    "A Philly cheesesteak with sliced steak, onions and melted cheese on a roll",
-    960, 540, "jeffreyw", "CC BY 2.0", "File:Cheesesteak_(19386149993).jpg",
+    "Authentic Philly cheesesteak sandwich with grilled ribeye beef and melted cheese on a hoagie roll",
+    1280, 720, "jeffreyw", "CC BY 2.0", "File:Cheesesteak_(19386149993).jpg",
   ),
   "chinese-rice": commons(
     "chinese-rice.jpg",
-    "Chinese-style fried rice with king prawns and spring onion",
-    960, 1280, "Andy Li", "CC0", "File:King_prawns_fried_rice,_Stir_Fry_by_CK.jpg",
+    "Fragrant Chinese wok-fried rice with king prawns, egg and spring onions",
+    1280, 1707, "Andy Li", "CC0", "File:King_prawns_fried_rice,_Stir_Fry_by_CK.jpg",
   ),
   turkey: commons(
     "turkey.jpg",
-    "Roast turkey with roast potatoes, vegetables and gravy",
-    960, 687, "Acabashi", "CC BY-SA 4.0",
+    "Slow-roasted golden turkey dinner with roasted potatoes, vegetables and rich gravy",
+    1280, 916, "Acabashi", "CC BY-SA 4.0",
     "File:Roast_turkey_dinner_Old_Nelson_Brewers_Fayre_Premier_Inn_Stroud_Gloucestershire.jpg",
   ),
   chicken: commons(
     "chicken.jpg",
-    "Glazed grilled chicken served with rice",
-    640, 480, "Hajime NAKANO", "CC BY 2.0",
-    "File:Jerk_chicken@The_Jamaican_Grill_(162928762).jpg",
+    "Whole roasted seasoned chicken with golden crispy skin and lemon wedges on a platter",
+    1280, 1927, "Evan Swigart", "CC BY 2.0",
+    "File:Max%27s_Roasted_Chicken_-_Evan_Swigart.jpg",
   ),
   "tilapia-fish": commons(
     "tilapia.jpg",
-    "Whole tilapia fish grilled over charcoal",
-    960, 636, "Noahalorwu", "CC BY-SA 4.0", "File:Grilled_Tilapia_-_Winneba.jpg",
+    "Whole seasoned tilapia fish grilled over hot open coals",
+    1280, 848, "Noahalorwu", "CC BY-SA 4.0", "File:Grilled_Tilapia_-_Winneba.jpg",
   ),
   "corn-dogs": commons(
     "corn-dogs.jpg",
-    "Two golden corn dogs on sticks with ketchup",
-    960, 638, "Ocdp", "CC0", "File:Corn_dog_001.jpg",
+    "Golden deep-fried corn dog on a stick with mustard and ketchup drizzle",
+    1280, 853, "Tasy Hong", "CC0", "File:Corn_dog.jpg",
   ),
 } as const satisfies Record<string, FoodImage>;
 

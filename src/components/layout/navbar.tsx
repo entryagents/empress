@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Menu, ShoppingBag, X, ArrowUpRight } from "lucide-react";
 import { navLinks, ROUTES } from "@/config/site";
 import { ButtonLink } from "@/components/ui/button";
+import { useCart } from "@/lib/cart-context";
 import { Logo } from "./logo";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +15,7 @@ const ease = [0.22, 1, 0.36, 1] as const;
 export function Navbar() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const { totalCount, openCart } = useCart();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -41,7 +43,7 @@ export function Navbar() {
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.9, ease }}
         className={cn(
-          "fixed inset-x-0 top-0 z-50 transition-colors duration-500",
+          "fixed inset-x-0 top-0 z-40 transition-colors duration-500",
           scrolled || open ? "bg-wine-950/95 shadow-soft backdrop-blur-sm" : "bg-transparent",
           "text-ivory-50",
         )}
@@ -63,19 +65,29 @@ export function Navbar() {
           </nav>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            <Link
-              href={ROUTES.order}
-              aria-label="Cart (0 items)"
-              className="relative grid size-11 place-items-center rounded-full transition-colors hover:bg-ivory-50/10"
+            <button
+              type="button"
+              onClick={openCart}
+              aria-label={`Open shopping cart (${totalCount} ${totalCount === 1 ? "item" : "items"})`}
+              className="relative grid size-11 place-items-center rounded-full transition-colors hover:bg-ivory-50/10 focus-visible:outline-champagne-400"
             >
               <ShoppingBag className="size-5" strokeWidth={1.6} />
-              <span className="absolute right-1.5 top-1.5 grid size-4 place-items-center rounded-full bg-champagne-400 text-[0.6rem] font-bold text-wine-950">
-                0
+              <span
+                className={cn(
+                  "absolute right-1.5 top-1.5 grid min-w-4 h-4 px-1 place-items-center rounded-full text-[0.6rem] font-bold transition-all",
+                  totalCount > 0
+                    ? "scale-100 bg-champagne-400 text-wine-950 shadow-xs"
+                    : "scale-90 bg-wine-800 text-ivory-200",
+                )}
+              >
+                {totalCount}
               </span>
-            </Link>
+            </button>
+
             <ButtonLink href={ROUTES.order} variant="gold" size="sm" className="hidden sm:inline-flex">
               Order Now
             </ButtonLink>
+
             <button
               type="button"
               onClick={() => setOpen((o) => !o)}
@@ -101,14 +113,14 @@ export function Navbar() {
             animate={{ clipPath: "inset(0 0 0% 0)" }}
             exit={{ clipPath: "inset(0 0 100% 0)", transition: { duration: 0.5, ease } }}
             transition={{ duration: 0.7, ease }}
-            className="fixed inset-0 z-40 flex flex-col overflow-y-auto bg-wine-950 pt-24 text-ivory-50 lg:hidden"
+            className="fixed inset-0 z-30 flex flex-col overflow-y-auto bg-wine-950 pt-24 text-ivory-50 lg:hidden"
           >
             <nav aria-label="Mobile" className="container-x flex flex-1 flex-col justify-center gap-1 pb-6">
               {navLinks.map((l, i) => (
                 <motion.div
                   key={l.label}
                   initial={{ opacity: 0, y: 36 }}
-                  animate={{ opacity: 1, y: 0, transition: { delay: 0.25 + i * 0.07, duration: 0.7, ease } }}
+                  animate={{ opacity: 1, y: 0, transition: { delay: 0.2 + i * 0.07, duration: 0.7, ease } }}
                   exit={{ opacity: 0 }}
                 >
                   <Link
@@ -121,10 +133,26 @@ export function Navbar() {
                   </Link>
                 </motion.div>
               ))}
+              <motion.div
+                initial={{ opacity: 0, y: 36 }}
+                animate={{ opacity: 1, y: 0, transition: { delay: 0.2 + navLinks.length * 0.07, duration: 0.7, ease } }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    openCart();
+                  }}
+                  className="flex w-full items-baseline gap-4 border-b border-ivory-50/10 py-4 font-serif text-[2.6rem] leading-none tracking-tight text-left"
+                >
+                  <span className="eyebrow w-6 text-champagne-400">05</span>
+                  Bag ({totalCount})
+                </button>
+              </motion.div>
             </nav>
             <motion.div
               initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0, transition: { delay: 0.6, duration: 0.7, ease } }}
+              animate={{ opacity: 1, y: 0, transition: { delay: 0.55, duration: 0.7, ease } }}
               className="container-x pb-10"
             >
               <ButtonLink href={ROUTES.order} variant="gold" size="lg" className="w-full" onClick={() => setOpen(false)}>

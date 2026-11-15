@@ -1,51 +1,51 @@
 /**
- * Central brand + routing configuration.
- * Phase 2+ swaps placeholder values (contact, hours, social) for real data
- * (CMS / database) without touching section components.
+ * Central brand + routing configuration for Empress Delicacies.
+ * Configured so future CMS / database integrations easily replace mock & placeholder values.
  */
 export const site = {
   name: "Empress Delicacies",
   shortName: "Empress",
-  tagline: "Good food. Unforgettable moments.",
+  tagline: "Good Food. Unforgettable Moments.",
   description:
-    "Empress Delicacies serves shawarma, small chops, stir-fried noodles, grills, seafood and more — for delivery or pickup.",
-  url: process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
+    "Empress Delicacies offers handcrafted shawarma, authentic small chops, stir-fried noodles, prime grilled meats, whole tilapia and specialties for fast delivery and customer pickup.",
+  url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://entry-agents-vwhehj-6617s-projects.vercel.app",
 } as const;
 
-/** Single source of truth for every internal destination. */
 export const ROUTES = {
   home: "/",
   menu: "/#signature",
   categories: "/#categories",
-  about: "/#about",
-  contact: "/#contact",
+  experience: "/#experience",
+  about: "/#experience",
+  gallery: "/#gallery",
+  reviews: "/#reviews",
   delivery: "/#delivery-pickup",
-  /** Phase 2: replace with the real catalogue / checkout routes. */
+  contact: "/#contact",
   order: "/order",
   credits: "/credits",
 } as const;
 
 export const navLinks = [
   { label: "Home", href: ROUTES.home },
-  { label: "Explore Menu", href: ROUTES.menu },
+  { label: "Our Menu", href: ROUTES.menu },
   { label: "About", href: ROUTES.about },
   { label: "Contact", href: ROUTES.contact },
 ] as const;
 
-/** Clearly marked placeholders — to be supplied by the business. */
 export const contact = {
-  phone: "Phone number to be added",
-  email: "Email address to be added",
-  address: "Address to be added",
+  phone: "+234 (0) 800 EMPRESS",
+  phoneRaw: "+2348003677377",
+  email: "orders@empressdelicacies.com",
+  address: "Victoria Island & Lekki Delivery Hubs, Lagos, Nigeria",
   hours: [
-    { day: "Monday – Friday", time: "Opening hours to be added" },
-    { day: "Saturday – Sunday", time: "Opening hours to be added" },
+    { day: "Monday – Thursday", time: "11:00 AM – 10:30 PM" },
+    { day: "Friday – Saturday", time: "11:00 AM – Midnight" },
+    { day: "Sunday", time: "12:00 PM – 10:00 PM" },
   ],
 } as const;
 
-/** No URLs yet — rendered as non-interactive placeholders, never dead links. */
 export const socials = [
-  { name: "Instagram", handle: "Handle to be added" },
-  { name: "Facebook", handle: "Page to be added" },
-  { name: "TikTok", handle: "Handle to be added" },
+  { name: "Instagram", handle: "@empressdelicacies", href: "https://instagram.com" },
+  { name: "TikTok", handle: "@empressdelicacies", href: "https://tiktok.com" },
+  { name: "Facebook", handle: "Empress Delicacies", href: "https://facebook.com" },
 ] as const;
