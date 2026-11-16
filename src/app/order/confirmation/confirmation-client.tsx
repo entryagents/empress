@@ -382,6 +382,15 @@ export function OrderConfirmationClient() {
                 </div>
               )}
 
+              <div className="pt-1">
+                <a
+                  href={`/order/review?ref=${order.order_reference}&token=${order.secure_access_token}`}
+                  className="flex w-full items-center justify-center gap-2 rounded border border-wine-900/20 bg-ivory-50 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-wine-900 hover:bg-ivory-100 transition-colors"
+                >
+                  <span>Review Dishes &amp; Feedback</span>
+                </a>
+              </div>
+
               <div className="flex items-center justify-between">
                 <span className="text-wine-700">Customer Phone</span>
                 <span className="font-medium text-wine-950">{order.customer_phone}</span>
