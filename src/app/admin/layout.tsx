@@ -63,6 +63,13 @@ export default function AdminLayout({
                 Settings &amp; Zones
               </Link>
               <Link
+                href="/admin/analytics"
+                className="flex items-center gap-1.5 rounded px-3 py-1.5 transition-colors hover:bg-wine-900/60 hover:text-champagne-300"
+              >
+                <Sparkles className="size-3.5 text-champagne-400" />
+                Analytics &amp; Reports
+              </Link>
+              <Link
                 href="/admin/payments"
                 className="flex items-center gap-1.5 rounded px-3 py-1.5 transition-colors hover:bg-wine-900/60 hover:text-champagne-300"
               >
