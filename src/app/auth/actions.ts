@@ -40,7 +40,7 @@ async function forwardAuthCookies(res: Response) {
       else if (optKey === "domain") options.domain = optVal;
     }
 
-    cookieStore.set(name, value, options);
+    cookieStore.set(name, decodeURIComponent(value), options);
   }
 }
 

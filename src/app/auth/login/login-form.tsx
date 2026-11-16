@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Lock, Mail, AlertCircle, ShoppingBag } from "lucide-react";
-import { customerLoginAction } from "../actions";
+import { signIn } from "@/lib/auth/client";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 
 export function LoginForm() {
@@ -23,20 +23,21 @@ export function LoginForm() {
     setErrorMsg(null);
     setIsSubmitting(true);
 
-    const formData = new FormData();
-    formData.append("email", email);
-    formData.append("password", password);
-
     try {
-      const res = await customerLoginAction(formData);
-      if (res.success) {
-        window.location.href = redirectTarget;
-      } else {
-        setErrorMsg(res.error || "Invalid email or password.");
+      const { data, error } = await signIn.email({
+        email: email.trim().toLowerCase(),
+        password,
+      });
+
+      if (error || !data?.user) {
+        setErrorMsg(error?.message || "Invalid email or password.");
+        setIsSubmitting(false);
+        return;
       }
+
+      window.location.href = redirectTarget;
     } catch (err: any) {
-      setErrorMsg(err.message || "An unexpected error occurred.");
-    } finally {
+      setErrorMsg(err?.message || "An unexpected error occurred.");
       setIsSubmitting(false);
     }
   };
