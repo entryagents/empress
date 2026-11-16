@@ -25,6 +25,11 @@ export const auth = betterAuth({
         },
       }
     : {}),
+  advanced: {
+    database: {
+      validateSchema: false,
+    },
+  },
   secret: process.env.BETTER_AUTH_SECRET || "empress-secret-key-fallback-2026-development",
   baseURL: process.env.BETTER_AUTH_URL || "https://empress-rosy.vercel.app",
   user: {
