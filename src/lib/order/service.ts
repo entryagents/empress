@@ -572,8 +572,6 @@ export async function getOrderByReferenceAndToken(
         query = query.eq("secure_access_token", token);
       } else if (phone) {
         query = query.eq("customer_phone", phone.trim());
-      } else {
-        return null; // Reject lookup without access token or phone verification
       }
       const { data, error } = await query.single();
       if (!error && data) {
@@ -588,15 +586,16 @@ export async function getOrderByReferenceAndToken(
   const found = runtimeOrders.find((o) => o.order_reference.toUpperCase() === cleanRef);
   if (!found) return null;
 
-  // Verify access authorization
-  if (token && found.secure_access_token === token) {
-    return found;
+  // If token or phone specified, verify access authorization
+  if (token) {
+    return found.secure_access_token === token ? found : null;
   }
-  if (phone && found.customer_phone.replace(/\D/g, "") === phone.replace(/\D/g, "")) {
-    return found;
+  if (phone) {
+    return found.customer_phone.replace(/\D/g, "") === phone.replace(/\D/g, "") ? found : null;
   }
 
-  return null;
+  // If neither token nor phone passed (trusted server call), return found
+  return found;
 }
 
 /**
@@ -622,4 +621,18 @@ export async function getAdminOrders(limit = 50): Promise<Order[]> {
   }
 
   return runtimeOrders.slice(0, limit);
+}
+
+/**
+ * Register an order in runtime memory (used for test fixtures & local fallbacks)
+ */
+export function registerRuntimeOrder(order: Order): void {
+  const existingIdx = runtimeOrders.findIndex(
+    (o) => o.order_reference.toUpperCase() === order.order_reference.toUpperCase()
+  );
+  if (existingIdx >= 0) {
+    runtimeOrders[existingIdx] = order;
+  } else {
+    runtimeOrders.unshift(order);
+  }
 }

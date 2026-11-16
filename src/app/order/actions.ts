@@ -62,10 +62,16 @@ export async function submitCheckoutOrderAction(
     if (res.success && res.order) {
       revalidatePath("/admin/orders");
       revalidatePath("/account/orders");
+
+      // Initialize Bachs hosted checkout session
+      const { createBachsCheckoutSession } = await import("@/lib/payment/service");
+      const paymentRes = await createBachsCheckoutSession(res.order);
+
       return {
         success: true,
         orderReference: res.order.order_reference,
         accessToken: res.order.secure_access_token,
+        checkoutUrl: paymentRes.success ? paymentRes.checkoutUrl : null,
       };
     }
     return {
@@ -82,11 +88,18 @@ export async function submitCheckoutOrderAction(
 
 export async function lookupOrderAction(reference: string, phoneOrToken: string) {
   try {
+    if (!phoneOrToken || !phoneOrToken.trim()) {
+      return {
+        success: false,
+        error: "Access token or customer phone number is required.",
+      };
+    }
+
     const isToken = phoneOrToken.length > 20;
     const order = await getOrderByReferenceAndToken(
       reference,
-      isToken ? phoneOrToken : undefined,
-      !isToken ? phoneOrToken : undefined
+      isToken ? phoneOrToken.trim() : undefined,
+      !isToken ? phoneOrToken.trim() : undefined
     );
 
     if (!order) {

@@ -12,7 +12,15 @@ export type OrderStatus =
   | "collected"
   | "cancelled";
 
-export type PaymentStatus = "unpaid" | "pending" | "paid" | "failed" | "refunded";
+export type PaymentStatus =
+  | "unpaid"
+  | "pending"
+  | "paid"
+  | "failed"
+  | "expired"
+  | "underpaid"
+  | "refund_pending"
+  | "refunded";
 
 export interface DeliveryZone {
   id: string;
@@ -159,6 +167,10 @@ export interface Order {
   total_kobo: number;
   status: OrderStatus;
   payment_status: PaymentStatus;
+  bachs_checkout_id?: string | null;
+  bachs_payment_id?: string | null;
+  bachs_checkout_url?: string | null;
+  payment_completed_at?: string | null;
   special_instructions?: string | null;
   idempotency_key?: string | null;
   created_at: string;

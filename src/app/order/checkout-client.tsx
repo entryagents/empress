@@ -203,7 +203,14 @@ export function CheckoutClient({ deliveryZones, customer, savedAddresses = [] }:
       if (res.success && res.orderReference) {
         // Clear local cart
         clearCart();
-        // Route to secure order confirmation page
+        
+        // If Bachs hosted checkout URL is provided, redirect to Bachs checkout immediately
+        if (res.checkoutUrl) {
+          window.location.href = res.checkoutUrl;
+          return;
+        }
+
+        // Fallback to order confirmation page
         router.push(
           `/order/confirmation?ref=${res.orderReference}&token=${res.accessToken || ""}`
         );
@@ -738,20 +745,25 @@ export function CheckoutClient({ deliveryZones, customer, savedAddresses = [] }:
                   </div>
                 </div>
 
-                {/* Submit Action */}
+                {/* Submit Action & Bachs Payment Option */}
                 <button
                   type="submit"
                   form="checkout-form"
                   disabled={isSubmitting || items.length === 0}
-                  className="mt-6 flex w-full items-center justify-center gap-2 rounded bg-wine-900 px-6 py-3 text-xs font-semibold uppercase tracking-widest text-ivory-50 shadow-md transition-all hover:bg-wine-800 disabled:opacity-50 active:scale-98"
+                  className="mt-6 flex w-full items-center justify-center gap-2 rounded bg-wine-900 px-6 py-3.5 text-xs font-semibold uppercase tracking-widest text-ivory-50 shadow-md transition-all hover:bg-wine-800 disabled:opacity-50 active:scale-98"
                 >
                   <ShieldCheck className="size-4 text-champagne-400" />
-                  {isSubmitting ? "Securing Order..." : `Place Order (${formatKobo(pricing.totalKobo)})`}
+                  {isSubmitting ? "Creating Bachs Checkout..." : `Pay with Bachs (${formatKobo(pricing.totalKobo)})`}
                 </button>
 
-                <p className="mt-3 text-center text-[0.68rem] text-wine-700/80 leading-relaxed">
-                  Phase 4 checkout foundation. Your order snapshot will be reserved, followed by payment integration in the subsequent phase.
-                </p>
+                <div className="mt-3 text-center space-y-1">
+                  <p className="text-[0.68rem] text-wine-900 font-medium">
+                    Secure checkout powered by <span className="font-semibold text-wine-950">Bachs</span>
+                  </p>
+                  <p className="text-[0.65rem] text-wine-700/80 leading-relaxed">
+                    Supports Nigerian Debit Cards (NGN), Bank Transfers, and USSD. Your order is reserved immediately upon placement.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
