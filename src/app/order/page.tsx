@@ -1,4 +1,5 @@
 import { getDeliveryZones } from "@/lib/order/service";
+import { getCurrentCustomer, getCustomerAddresses } from "@/lib/customer/service";
 import { CheckoutClient } from "./checkout-client";
 
 export const metadata = {
@@ -7,6 +8,27 @@ export const metadata = {
 };
 
 export default async function OrderPage() {
-  const deliveryZones = await getDeliveryZones();
-  return <CheckoutClient deliveryZones={deliveryZones} />;
+  const [deliveryZones, { user, profile }] = await Promise.all([
+    getDeliveryZones(),
+    getCurrentCustomer(),
+  ]);
+
+  const savedAddresses = user ? await getCustomerAddresses(user.id) : [];
+
+  return (
+    <CheckoutClient
+      deliveryZones={deliveryZones}
+      customer={
+        user
+          ? {
+              id: user.id,
+              email: user.email,
+              fullName: profile?.full_name || "",
+              phone: profile?.phone || "",
+            }
+          : null
+      }
+      savedAddresses={savedAddresses}
+    />
+  );
 }

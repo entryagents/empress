@@ -50,9 +50,18 @@ export async function submitCheckoutOrderAction(
   checkoutInput: CustomerCheckoutInput
 ) {
   try {
-    const res = await createOrder(cartItems, checkoutInput);
+    const { createSupabaseServerClient } = await import("@/lib/supabase/server");
+    const supabase = await createSupabaseServerClient();
+    let userId: string | null = null;
+    if (supabase) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) userId = user.id;
+    }
+
+    const res = await createOrder(cartItems, checkoutInput, userId);
     if (res.success && res.order) {
       revalidatePath("/admin/orders");
+      revalidatePath("/account/orders");
       return {
         success: true,
         orderReference: res.order.order_reference,

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
-import { Menu, ShoppingBag, X, ArrowUpRight } from "lucide-react";
+import { Menu, ShoppingBag, X, ArrowUpRight, User } from "lucide-react";
 import { navLinks, ROUTES } from "@/config/site";
 import { ButtonLink } from "@/components/ui/button";
 import { useCart } from "@/lib/cart-context";
@@ -84,6 +84,15 @@ export function Navbar() {
               </span>
             </button>
 
+            <Link
+              href="/account"
+              aria-label="Customer Account & Orders"
+              className="grid size-11 place-items-center rounded-full transition-colors hover:bg-ivory-50/10 text-ivory-100 hover:text-champagne-300"
+              title="My Account"
+            >
+              <User className="size-5" strokeWidth={1.6} />
+            </Link>
+
             <ButtonLink href={ROUTES.order} variant="gold" size="sm" className="hidden sm:inline-flex">
               Order Now
             </ButtonLink>
@@ -148,6 +157,20 @@ export function Navbar() {
                   <span className="eyebrow w-6 text-champagne-400">05</span>
                   Bag ({totalCount})
                 </button>
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, y: 36 }}
+                animate={{ opacity: 1, y: 0, transition: { delay: 0.2 + (navLinks.length + 1) * 0.07, duration: 0.7, ease } }}
+                exit={{ opacity: 0 }}
+              >
+                <Link
+                  href="/account"
+                  onClick={() => setOpen(false)}
+                  className="flex items-baseline gap-4 border-b border-ivory-50/10 py-4 font-serif text-[2.6rem] leading-none tracking-tight"
+                >
+                  <span className="eyebrow w-6 text-champagne-400">06</span>
+                  My Account
+                </Link>
               </motion.div>
             </nav>
             <motion.div

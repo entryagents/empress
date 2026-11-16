@@ -28,11 +28,20 @@ import type { DeliveryZone, CartItemInput, CustomerCheckoutInput, PricingSummary
 import { validateCartAction, submitCheckoutOrderAction, applyCouponAction } from "./actions";
 import { DEFAULT_PICKUP_LOCATION } from "@/lib/order/config";
 
+import type { CustomerAddress } from "@/types/customer";
+
 interface Props {
   deliveryZones: DeliveryZone[];
+  customer?: {
+    id: string;
+    email: string;
+    fullName: string;
+    phone: string;
+  } | null;
+  savedAddresses?: CustomerAddress[];
 }
 
-export function CheckoutClient({ deliveryZones }: Props) {
+export function CheckoutClient({ deliveryZones, customer, savedAddresses = [] }: Props) {
   const router = useRouter();
   const {
     items,
@@ -44,24 +53,26 @@ export function CheckoutClient({ deliveryZones }: Props) {
     totalCount,
   } = useCart();
 
+  const defaultAddr = savedAddresses.find((a) => a.is_default) || savedAddresses[0];
+
   const [isPending, startTransition] = useTransition();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form State
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  // Form State - prefill if logged in customer
+  const [fullName, setFullName] = useState(customer?.fullName || "");
+  const [email, setEmail] = useState(customer?.email || "");
+  const [phone, setPhone] = useState(customer?.phone || "");
   const [kitchenNotes, setKitchenNotes] = useState("");
 
-  // Nigerian Delivery State
+  // Nigerian Delivery State - prefill if default saved address exists
   const [selectedZoneId, setSelectedZoneId] = useState<string>(deliveryZones[0]?.id || "");
-  const [streetAddress, setStreetAddress] = useState("");
-  const [buildingNumber, setBuildingNumber] = useState("");
-  const [area, setArea] = useState("");
-  const [landmark, setLandmark] = useState("");
-  const [deliveryInstructions, setDeliveryInstructions] = useState("");
+  const [streetAddress, setStreetAddress] = useState(defaultAddr?.street_address || "");
+  const [buildingNumber, setBuildingNumber] = useState(defaultAddr?.building_number || "");
+  const [area, setArea] = useState(defaultAddr?.area || "");
+  const [landmark, setLandmark] = useState(defaultAddr?.landmark || "");
+  const [deliveryInstructions, setDeliveryInstructions] = useState(defaultAddr?.delivery_instructions || "");
 
   // Pickup State
   const [pickupInstructions, setPickupInstructions] = useState("");
@@ -301,9 +312,20 @@ export function CheckoutClient({ deliveryZones }: Props) {
               <form id="checkout-form" onSubmit={handleSubmitCheckout} className="space-y-6">
                 {/* 1. Customer Information */}
                 <div className="rounded-[2px] border border-wine-900/10 bg-white p-6 shadow-soft">
-                  <h2 className="font-serif text-lg font-medium text-wine-950 border-b border-wine-900/10 pb-2">
-                    1. Customer Information
-                  </h2>
+                  <div className="flex items-center justify-between border-b border-wine-900/10 pb-2">
+                    <h2 className="font-serif text-lg font-medium text-wine-950">
+                      1. Customer Information
+                    </h2>
+                    {customer ? (
+                      <span className="rounded bg-champagne-500/15 px-2 py-0.5 text-[0.65rem] font-semibold text-champagne-800 border border-champagne-500/30">
+                        Signed In: {customer.email}
+                      </span>
+                    ) : (
+                      <span className="text-[0.7rem] text-wine-600">
+                        Guest Checkout · <Link href="/auth/login" className="font-semibold text-champagne-700 hover:underline">Sign In</Link>
+                      </span>
+                    )}
+                  </div>
                   <div className="mt-4 space-y-4">
                     <div>
                       <label className="block text-xs font-semibold uppercase tracking-wider text-wine-900">
@@ -369,6 +391,34 @@ export function CheckoutClient({ deliveryZones }: Props) {
                         Fee: {formatKobo(activeZone?.fee_kobo || 0)}
                       </span>
                     </div>
+
+                    {savedAddresses.length > 0 && (
+                      <div className="mt-4 rounded bg-champagne-500/10 border border-champagne-500/25 p-3">
+                        <label className="block text-xs font-semibold text-wine-950">
+                          Use Saved Address:
+                        </label>
+                        <select
+                          onChange={(e) => {
+                            const found = savedAddresses.find((a) => a.id === e.target.value);
+                            if (found) {
+                              setArea(found.area);
+                              setStreetAddress(found.street_address);
+                              setBuildingNumber(found.building_number || "");
+                              setLandmark(found.landmark || "");
+                              setDeliveryInstructions(found.delivery_instructions || "");
+                            }
+                          }}
+                          className="mt-1 w-full rounded border border-wine-900/20 bg-white px-2.5 py-1.5 text-xs text-wine-950 focus:outline-none"
+                        >
+                          <option value="">Select a saved delivery address...</option>
+                          {savedAddresses.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.label} ({a.area} — {a.street_address}) {a.is_default ? "★ Default" : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
                     <div className="mt-4 space-y-4">
                       {/* Delivery Zone Selector */}
