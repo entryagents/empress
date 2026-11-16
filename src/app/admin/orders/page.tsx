@@ -3,6 +3,9 @@ import { connection } from "next/server";
 import { getAdminOrders, getOrderAdminMetrics } from "@/lib/order/service";
 import { AdminOrdersClient } from "./orders-client";
 
+export const instant = false;
+
+
 export const metadata = {
   title: "Order Fulfilment & Intake | Empress Admin",
   description: "Comprehensive culinary order intake, status workflow transitions, and financial ledger.",

@@ -1,7 +1,7 @@
 import { BachsWebhookError, webhooks } from "@bachs/sdk";
 import type { WebhookEvent, WebhookHeaders } from "@bachs/sdk";
 import { getBachsClient, getBachsWebhookSecret, getAppBaseUrl, isBachsConfigured } from "./bachs";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db";
 import { getOrderByReferenceAndToken } from "@/lib/order/service";
 import type { Order, PaymentStatus } from "@/types/order";
 import type {
@@ -11,7 +11,7 @@ import type {
   OrderPaymentStatusResponse,
 } from "@/types/payment";
 
-// In-memory fallback stores for local sandbox testing when Supabase is not attached
+// In-memory fallback stores for local sandbox testing when database is not attached
 const localPayments: Map<string, PaymentRecord> = new Map();
 const localProcessedEvents: Set<string> = new Set();
 const localEventLogs: PaymentEventRecord[] = [];
@@ -205,37 +205,34 @@ async function recordPaymentInitiation(params: {
   };
   localPayments.set(params.checkoutId, paymentRecord);
 
-  // 2. Persist to Supabase if available
-  const supabase = getSupabaseServerClient();
-  if (supabase) {
+  // 2. Persist to Neon PostgreSQL
+  const sql = getDb();
+  if (sql) {
     try {
-      await supabase
-        .from("orders")
-        .update({
-          payment_status: "pending",
-          bachs_checkout_id: params.checkoutId,
-          bachs_checkout_url: params.checkoutUrl,
-          updated_at: now,
-        })
-        .eq("order_reference", params.orderReference);
+      await sql`
+        UPDATE orders SET
+          payment_status = 'pending',
+          bachs_checkout_id = ${params.checkoutId},
+          bachs_checkout_url = ${params.checkoutUrl},
+          updated_at = ${now}
+        WHERE order_reference = ${params.orderReference};
+      `;
 
-      await supabase.from("payments").insert({
-        order_id: params.orderId,
-        order_reference: params.orderReference,
-        provider: "bachs",
-        bachs_checkout_id: params.checkoutId,
-        amount_kobo: params.amountKobo,
-        currency: params.currency,
-        status: "pending",
-        customer_email: params.customerEmail,
-        customer_name: params.customerName,
-        checkout_url: params.checkoutUrl,
-        expires_at: params.expiresAt || null,
-        created_at: now,
-        updated_at: now,
-      });
+      await sql`
+        INSERT INTO payments (
+          id, order_id, order_reference, provider, bachs_checkout_id,
+          amount_kobo, currency, status, customer_email, metadata, created_at, updated_at
+        ) VALUES (
+          ${`pay-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`},
+          ${params.orderId}, ${params.orderReference}, 'bachs', ${params.checkoutId},
+          ${params.amountKobo}, ${params.currency}, 'pending', ${params.customerEmail},
+          ${JSON.stringify({ customer_name: params.customerName, checkout_url: params.checkoutUrl })}::jsonb,
+          ${now}, ${now}
+        )
+        ON CONFLICT (id) DO NOTHING;
+      `;
     } catch (e) {
-      console.warn("Could not write payment record to Supabase, stored in memory:", e);
+      console.warn("Could not write payment record to Neon, stored in memory:", e);
     }
   }
 }
@@ -272,17 +269,18 @@ export async function processBachsWebhookEvent(
     return { success: true, message: "Event already processed (deduplicated).", duplicate: true };
   }
 
-  const supabase = getSupabaseServerClient();
-  if (supabase) {
-    const { data: existingEvent } = await supabase
-      .from("payment_webhook_events")
-      .select("id")
-      .eq("event_id", eventId)
-      .maybeSingle();
-
-    if (existingEvent) {
-      localProcessedEvents.add(eventId);
-      return { success: true, message: "Event already recorded in Supabase (deduplicated).", duplicate: true };
+  const sql = getDb();
+  if (sql) {
+    try {
+      const rows = await sql`
+        SELECT id FROM payment_webhook_events WHERE event_id = ${eventId} LIMIT 1;
+      `;
+      if (rows && rows.length > 0) {
+        localProcessedEvents.add(eventId);
+        return { success: true, message: "Event already recorded in Neon (deduplicated).", duplicate: true };
+      }
+    } catch (e) {
+      console.warn("Neon webhook deduplication check notice:", e);
     }
   }
 
@@ -308,13 +306,15 @@ export async function processBachsWebhookEvent(
 
   // Fallback to lookup by checkoutId if orderRef wasn't in root data
   if (!order && checkoutId) {
-    if (supabase) {
-      const { data: ordData } = await supabase
-        .from("orders")
-        .select("*")
-        .eq("bachs_checkout_id", checkoutId)
-        .maybeSingle();
-      if (ordData) order = ordData;
+    if (sql) {
+      try {
+        const rows = await sql`
+          SELECT * FROM orders WHERE bachs_checkout_id = ${checkoutId} LIMIT 1;
+        `;
+        if (rows && rows.length > 0) order = rows[0] as Order;
+      } catch {
+        // Fallback
+      }
     }
     if (!order) {
       const paymentRec = localPayments.get(checkoutId);
@@ -419,37 +419,27 @@ async function updateOrderPaymentState(params: {
   paymentCompletedAt?: string | null;
 }) {
   const now = new Date().toISOString();
-  const supabase = getSupabaseServerClient();
-
-  if (supabase) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const updateData: Record<string, unknown> = {
-        payment_status: params.paymentStatus,
-        updated_at: now,
-      };
-      if (params.bachsPaymentId) {
-        updateData.bachs_payment_id = params.bachsPaymentId;
-      }
-      if (params.paymentCompletedAt) {
-        updateData.payment_completed_at = params.paymentCompletedAt;
-      }
+      await sql`
+        UPDATE orders SET
+          payment_status = ${params.paymentStatus},
+          bachs_payment_id = COALESCE(${params.bachsPaymentId || null}, bachs_payment_id),
+          payment_completed_at = ${params.paymentCompletedAt ? params.paymentCompletedAt : null},
+          updated_at = ${now}
+        WHERE order_reference = ${params.orderReference};
+      `;
 
-      await supabase
-        .from("orders")
-        .update(updateData)
-        .eq("order_reference", params.orderReference);
-
-      await supabase
-        .from("payments")
-        .update({
-          status: params.paymentStatus,
-          bachs_payment_id: params.bachsPaymentId || null,
-          completed_at: params.paymentCompletedAt || null,
-          updated_at: now,
-        })
-        .eq("order_reference", params.orderReference);
+      await sql`
+        UPDATE payments SET
+          status = ${params.paymentStatus},
+          bachs_payment_id = COALESCE(${params.bachsPaymentId || null}, bachs_payment_id),
+          updated_at = ${now}
+        WHERE order_reference = ${params.orderReference};
+      `;
     } catch (e) {
-      console.warn("Could not update order payment state in Supabase:", e);
+      console.warn("Could not update order payment state in Neon:", e);
     }
   }
 
@@ -493,24 +483,20 @@ async function logWebhookEvent(
 
   localEventLogs.push(record);
 
-  const supabase = getSupabaseServerClient();
-  if (supabase) {
+  const sql = getDb();
+  if (sql) {
     try {
-      await supabase.from("payment_webhook_events").insert({
-        event_id: event.id,
-        event_type: event.type,
-        order_reference: orderReference,
-        order_id: orderId,
-        bachs_checkout_id: record.bachs_checkout_id,
-        bachs_payment_id: record.bachs_payment_id,
-        status: record.status,
-        amount: record.amount,
-        currency: record.currency,
-        payload_summary: record.payload_summary,
-        processed_at: record.processed_at,
-      });
+      await sql`
+        INSERT INTO payment_webhook_events (
+          id, event_id, event_type, order_reference, status, raw_payload, processed_at
+        ) VALUES (
+          ${record.id}, ${event.id}, ${event.type}, ${orderReference || null},
+          ${record.status || 'received'}, ${JSON.stringify(event.data || {})}::jsonb, ${record.processed_at}
+        )
+        ON CONFLICT (event_id) DO NOTHING;
+      `;
     } catch (e) {
-      console.warn("Failed to write webhook audit log to Supabase:", e);
+      console.warn("Failed to write webhook audit log to Neon:", e);
     }
   }
 }
@@ -543,20 +529,17 @@ export async function getOrderPaymentStatus(
  * Fetch payments for Admin Dashboard (with audit trail)
  */
 export async function getAdminPayments(limit = 50): Promise<PaymentRecord[]> {
-  const supabase = getSupabaseServerClient();
-  if (supabase) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await supabase
-        .from("payments")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(limit);
-
-      if (!error && data && data.length > 0) {
-        return data as PaymentRecord[];
+      const rows = await sql`
+        SELECT * FROM payments ORDER BY created_at DESC LIMIT ${limit};
+      `;
+      if (rows && rows.length > 0) {
+        return rows as PaymentRecord[];
       }
     } catch (e) {
-      console.warn("Could not query payments table, using memory:", e);
+      console.warn("Could not query payments table on Neon, using memory:", e);
     }
   }
 
@@ -569,20 +552,17 @@ export async function getAdminPayments(limit = 50): Promise<PaymentRecord[]> {
  * Fetch webhook event logs for Admin Dashboard
  */
 export async function getAdminPaymentEvents(limit = 50): Promise<PaymentEventRecord[]> {
-  const supabase = getSupabaseServerClient();
-  if (supabase) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await supabase
-        .from("payment_webhook_events")
-        .select("*")
-        .order("processed_at", { ascending: false })
-        .limit(limit);
-
-      if (!error && data && data.length > 0) {
-        return data as PaymentEventRecord[];
+      const rows = await sql`
+        SELECT * FROM payment_webhook_events ORDER BY processed_at DESC LIMIT ${limit};
+      `;
+      if (rows && rows.length > 0) {
+        return rows as PaymentEventRecord[];
       }
     } catch (e) {
-      console.warn("Could not query payment_webhook_events table, using memory:", e);
+      console.warn("Could not query payment_webhook_events table on Neon:", e);
     }
   }
 

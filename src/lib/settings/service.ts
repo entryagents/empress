@@ -4,8 +4,7 @@ import type {
   BusinessAvailabilityStatus,
 } from "@/types/settings";
 import type { DeliveryZone } from "@/types/order";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db";
 
 // Default configuration for Empress Delicacies located in Delta State, Nigeria
 let runtimeSettings: BusinessSettings = {
@@ -16,11 +15,11 @@ let runtimeSettings: BusinessSettings = {
     "Premium handcrafted shawarma, authentic small chops, stir-fried noodles, prime grills, fresh seafood and specialties.",
   phone: "+234 800 000 0000",
   whatsapp_number: "+234 800 000 0000",
-  email: "orders@empressdelicacies.com",
+  email: "orders@empressdelicacies.ng",
   address: "Empress Delicacies Culinary Studio, Delta State, Nigeria",
   country: "Nigeria",
   state: "Delta State",
-  city: "Asaba",
+  city: "Warri",
   currency: "NGN",
   currency_symbol: "₦",
   opening_time: "10:00",
@@ -46,11 +45,32 @@ let runtimeSettings: BusinessSettings = {
   updated_at: new Date().toISOString(),
 };
 
-// Runtime Delivery Zones (Defaulting to Delta State towns/cities)
-let runtimeDeltaDeliveryZones: DeliveryZone[] = [
+// 5 Specified Service Locations: Warri, Asaba, Ughelli, Benin, Abraka
+export const DEFAULT_LOCATIONS_ZONES: DeliveryZone[] = [
   {
-    id: "zone-asaba-central",
-    name: "Asaba Central & GRA",
+    id: "zone-warri",
+    name: "Warri & Effurun Hub",
+    state: "Delta State",
+    city: "Warri",
+    areas: [
+      "Airport Road",
+      "Effurun GRA",
+      "PTI Road",
+      "Enerhen",
+      "Deco Road",
+      "Jakpa Road",
+      "Refinery Road",
+      "NPA Expressway",
+    ],
+    fee_kobo: 200000, // ₦2,000
+    estimated_minutes_min: 25,
+    estimated_minutes_max: 45,
+    is_active: true,
+    display_order: 1,
+  },
+  {
+    id: "zone-asaba",
+    name: "Asaba Central & Capital Territory",
     state: "Delta State",
     city: "Asaba",
     areas: [
@@ -62,44 +82,71 @@ let runtimeDeltaDeliveryZones: DeliveryZone[] = [
       "Interbau Roundabout",
       "DBS Road",
     ],
-    fee_kobo: 150000, // ₦1,500
-    estimated_minutes_min: 25,
-    estimated_minutes_max: 45,
-    is_active: true,
-    display_order: 1,
-  },
-  {
-    id: "zone-asaba-okpanam",
-    name: "Okpanam & Ibusa Road Corridors",
-    state: "Delta State",
-    city: "Asaba",
-    areas: ["Okpanam Town", "Midwifery", "Ibusa Road", "Core Area"],
-    fee_kobo: 200000, // ₦2,000
-    estimated_minutes_min: 35,
-    estimated_minutes_max: 55,
-    is_active: true,
-    display_order: 2,
-  },
-  {
-    id: "zone-warri-effurun",
-    name: "Warri & Effurun Hub",
-    state: "Delta State",
-    city: "Warri",
-    areas: [
-      "Airport Road",
-      "Effurun GRA",
-      "PTI Road",
-      "Enerhen",
-      "Deco Road",
-      "Jakpa Road",
-    ],
     fee_kobo: 250000, // ₦2,500
     estimated_minutes_min: 30,
     estimated_minutes_max: 50,
     is_active: true,
+    display_order: 2,
+  },
+  {
+    id: "zone-ughelli",
+    name: "Ughelli Metropolis",
+    state: "Delta State",
+    city: "Ughelli",
+    areas: [
+      "Market Road",
+      "Isoko Road",
+      "Otovwodo Junction",
+      "Post Office Road",
+      "Afiesere Road",
+      "Ekuigbo",
+    ],
+    fee_kobo: 250000, // ₦2,500
+    estimated_minutes_min: 35,
+    estimated_minutes_max: 55,
+    is_active: true,
     display_order: 3,
   },
+  {
+    id: "zone-benin",
+    name: "Benin City Corridor",
+    state: "Edo State",
+    city: "Benin",
+    areas: [
+      "Airport Road GRA",
+      "Sapele Road",
+      "Ring Road",
+      "Akpakpava Road",
+      "Ekenwan Road",
+      "Uselu",
+    ],
+    fee_kobo: 350000, // ₦3,500
+    estimated_minutes_min: 45,
+    estimated_minutes_max: 75,
+    is_active: true,
+    display_order: 4,
+  },
+  {
+    id: "zone-abraka",
+    name: "Abraka University Town",
+    state: "Delta State",
+    city: "Abraka",
+    areas: [
+      "DELSU Main Campus",
+      "Site 2 & Site 3",
+      "Police Station Road",
+      "Old Sapele Road",
+      "Ethiope Riverfront",
+    ],
+    fee_kobo: 200000, // ₦2,000
+    estimated_minutes_min: 25,
+    estimated_minutes_max: 45,
+    is_active: true,
+    display_order: 5,
+  },
 ];
+
+let runtimeDeltaDeliveryZones: DeliveryZone[] = [...DEFAULT_LOCATIONS_ZONES];
 
 let runtimeCMSContent: HomepageCMSContent = {
   id: "default",
@@ -132,26 +179,18 @@ let runtimeCMSContent: HomepageCMSContent = {
  * BUSINESS SETTINGS MANAGEMENT
  * ----------------------------------------------------------------------------
  */
-
 export async function getBusinessSettings(): Promise<BusinessSettings> {
-  const supabase = getSupabaseServerClient();
-  if (supabase) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await supabase
-        .from("business_settings")
-        .select("*")
-        .eq("id", "default")
-        .single();
-      if (!error && data) {
-        return {
-          ...data,
-          state: data.state || "Delta State",
-          country: data.country || "Nigeria",
-          currency: "NGN",
-        } as BusinessSettings;
+      const rows = await sql`
+        SELECT * FROM business_settings WHERE id = 'default' LIMIT 1;
+      `;
+      if (rows && rows.length > 0) {
+        return rows[0] as BusinessSettings;
       }
-    } catch {
-      // Fallback
+    } catch (e) {
+      console.warn("Neon getBusinessSettings failed, using memory:", e);
     }
   }
   return { ...runtimeSettings };
@@ -164,27 +203,61 @@ export async function updateBusinessSettings(
   const updated: BusinessSettings = {
     ...runtimeSettings,
     ...input,
-    country: "Nigeria", // Fixed by business requirement
-    state: "Delta State", // Default Delta State
-    currency: "NGN", // Fixed NGN
+    country: "Nigeria",
+    state: input.state || "Delta State",
+    currency: "NGN",
     currency_symbol: "₦",
     updated_at: now,
   };
 
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await admin
-        .from("business_settings")
-        .upsert({ ...updated, id: "default" })
-        .select()
-        .single();
-      if (!error && data) {
-        runtimeSettings = data as BusinessSettings;
+      const rows = await sql`
+        INSERT INTO business_settings (
+          id, business_name, logo_url, description, phone, whatsapp_number, email,
+          address, country, state, city, currency, currency_symbol, opening_time, closing_time,
+          operating_days, is_temporarily_closed, temporary_closure_reason, allow_ordering_override,
+          delivery_enabled, pickup_enabled, pickup_address, pickup_instructions, estimated_preparation_minutes, updated_at
+        ) VALUES (
+          'default', ${updated.business_name}, ${updated.logo_url || null}, ${updated.description || null},
+          ${updated.phone}, ${updated.whatsapp_number || null}, ${updated.email}, ${updated.address},
+          ${updated.country}, ${updated.state}, ${updated.city}, 'NGN', '₦',
+          ${updated.opening_time}, ${updated.closing_time}, ${JSON.stringify(updated.operating_days)}::jsonb,
+          ${updated.is_temporarily_closed}, ${updated.temporary_closure_reason || null}, ${updated.allow_ordering_override},
+          ${updated.delivery_enabled}, ${updated.pickup_enabled}, ${updated.pickup_address || null},
+          ${updated.pickup_instructions || null}, ${updated.estimated_preparation_minutes}, ${now}
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          business_name = EXCLUDED.business_name,
+          logo_url = EXCLUDED.logo_url,
+          description = EXCLUDED.description,
+          phone = EXCLUDED.phone,
+          whatsapp_number = EXCLUDED.whatsapp_number,
+          email = EXCLUDED.email,
+          address = EXCLUDED.address,
+          state = EXCLUDED.state,
+          city = EXCLUDED.city,
+          opening_time = EXCLUDED.opening_time,
+          closing_time = EXCLUDED.closing_time,
+          operating_days = EXCLUDED.operating_days,
+          is_temporarily_closed = EXCLUDED.is_temporarily_closed,
+          temporary_closure_reason = EXCLUDED.temporary_closure_reason,
+          allow_ordering_override = EXCLUDED.allow_ordering_override,
+          delivery_enabled = EXCLUDED.delivery_enabled,
+          pickup_enabled = EXCLUDED.pickup_enabled,
+          pickup_address = EXCLUDED.pickup_address,
+          pickup_instructions = EXCLUDED.pickup_instructions,
+          estimated_preparation_minutes = EXCLUDED.estimated_preparation_minutes,
+          updated_at = EXCLUDED.updated_at
+        RETURNING *;
+      `;
+      if (rows && rows.length > 0) {
+        runtimeSettings = rows[0] as BusinessSettings;
         return runtimeSettings;
       }
-    } catch {
-      // Fallback
+    } catch (e) {
+      console.warn("Neon updateBusinessSettings failed, using memory:", e);
     }
   }
 
@@ -194,23 +267,21 @@ export async function updateBusinessSettings(
 
 /**
  * ----------------------------------------------------------------------------
- * DELTA STATE DELIVERY ZONE MANAGEMENT
+ * DELIVERY ZONES (WARRI, ASABA, UGHELLI, BENIN, ABRAKA)
  * ----------------------------------------------------------------------------
  */
-
 export async function getAdminDeliveryZones(): Promise<DeliveryZone[]> {
-  const supabase = getSupabaseServerClient();
-  if (supabase) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await supabase
-        .from("delivery_zones")
-        .select("*")
-        .order("display_order", { ascending: true });
-      if (!error && data && data.length > 0) {
-        return data as DeliveryZone[];
+      const rows = await sql`
+        SELECT * FROM delivery_zones ORDER BY display_order ASC;
+      `;
+      if (rows && rows.length > 0) {
+        return rows as DeliveryZone[];
       }
-    } catch {
-      // Fallback
+    } catch (e) {
+      console.warn("Neon getAdminDeliveryZones failed, using memory:", e);
     }
   }
   return [...runtimeDeltaDeliveryZones];
@@ -223,24 +294,39 @@ export async function saveDeliveryZone(
   const cleanZone: DeliveryZone = {
     ...zone,
     id,
-    state: "Delta State", // Enforced Delta State
+    state: zone.state || "Delta State",
     fee_kobo: Math.max(0, Math.round(Number(zone.fee_kobo) || 0)),
     areas: Array.isArray(zone.areas) ? zone.areas.map((a) => a.trim()).filter(Boolean) : [],
   };
 
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await admin
-        .from("delivery_zones")
-        .upsert(cleanZone)
-        .select()
-        .single();
-      if (!error && data) {
-        return data as DeliveryZone;
-      }
-    } catch {
-      // Fallback
+      const rows = await sql`
+        INSERT INTO delivery_zones (
+          id, name, state, city, areas, fee_kobo, estimated_minutes_min, estimated_minutes_max, is_active, display_order, created_at, updated_at
+        ) VALUES (
+          ${id}, ${cleanZone.name}, ${cleanZone.state}, ${cleanZone.city},
+          ${JSON.stringify(cleanZone.areas)}::jsonb, ${cleanZone.fee_kobo},
+          ${cleanZone.estimated_minutes_min}, ${cleanZone.estimated_minutes_max},
+          ${cleanZone.is_active}, ${cleanZone.display_order}, NOW(), NOW()
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          state = EXCLUDED.state,
+          city = EXCLUDED.city,
+          areas = EXCLUDED.areas,
+          fee_kobo = EXCLUDED.fee_kobo,
+          estimated_minutes_min = EXCLUDED.estimated_minutes_min,
+          estimated_minutes_max = EXCLUDED.estimated_minutes_max,
+          is_active = EXCLUDED.is_active,
+          display_order = EXCLUDED.display_order,
+          updated_at = NOW()
+        RETURNING *;
+      `;
+      if (rows && rows.length > 0) return rows[0] as DeliveryZone;
+    } catch (e) {
+      console.warn("Neon saveDeliveryZone failed, using memory:", e);
     }
   }
 
@@ -253,75 +339,38 @@ export async function saveDeliveryZone(
   return cleanZone;
 }
 
-export async function deleteDeliveryZone(zoneId: string): Promise<boolean> {
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+export async function deleteDeliveryZone(id: string): Promise<boolean> {
+  const sql = getDb();
+  if (sql) {
     try {
-      await admin.from("delivery_zones").delete().eq("id", zoneId);
-    } catch {
-      // Fallback
+      await sql`DELETE FROM delivery_zones WHERE id = ${id};`;
+    } catch (e) {
+      console.warn("Neon deleteDeliveryZone failed:", e);
     }
   }
-  runtimeDeltaDeliveryZones = runtimeDeltaDeliveryZones.filter((z) => z.id !== zoneId);
+  runtimeDeltaDeliveryZones = runtimeDeltaDeliveryZones.filter((z) => z.id !== id);
   return true;
 }
 
 /**
- * Validates whether a customer delivery address falls into an active Delta State zone
- */
-export async function matchAddressToDeliveryZone(params: {
-  city?: string;
-  area?: string;
-  street?: string;
-}): Promise<DeliveryZone | null> {
-  const zones = (await getAdminDeliveryZones()).filter((z) => z.is_active);
-  const targetArea = (params.area || "").trim().toLowerCase();
-  const targetCity = (params.city || "").trim().toLowerCase();
-
-  for (const zone of zones) {
-    // Check if city matches
-    const cityMatches = zone.city.toLowerCase() === targetCity;
-    // Check if any registered area name is found in target area or street
-    const areaMatches = zone.areas.some(
-      (a) =>
-        a.toLowerCase() === targetArea ||
-        (params.street && params.street.toLowerCase().includes(a.toLowerCase()))
-    );
-
-    if (areaMatches || (cityMatches && targetArea.length === 0)) {
-      return zone;
-    }
-  }
-
-  return null;
-}
-
-/**
  * ----------------------------------------------------------------------------
- * HOMEPAGE CMS MANAGEMENT
+ * HOMEPAGE CMS
  * ----------------------------------------------------------------------------
  */
-
-export async function getHomepageCMS(): Promise<HomepageCMSContent> {
-  const supabase = getSupabaseServerClient();
-  if (supabase) {
+export async function getHomepageCMSContent(): Promise<HomepageCMSContent> {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await supabase
-        .from("homepage_cms")
-        .select("*")
-        .eq("id", "default")
-        .single();
-      if (!error && data) {
-        return data as HomepageCMSContent;
-      }
-    } catch {
-      // Fallback
+      const rows = await sql`SELECT * FROM homepage_cms WHERE id = 'default' LIMIT 1;`;
+      if (rows && rows.length > 0) return rows[0] as HomepageCMSContent;
+    } catch (e) {
+      console.warn("Neon getHomepageCMSContent failed, using memory:", e);
     }
   }
   return { ...runtimeCMSContent };
 }
 
-export async function updateHomepageCMS(
+export async function updateHomepageCMSContent(
   input: Partial<HomepageCMSContent>
 ): Promise<HomepageCMSContent> {
   const now = new Date().toISOString();
@@ -331,20 +380,48 @@ export async function updateHomepageCMS(
     updated_at: now,
   };
 
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await admin
-        .from("homepage_cms")
-        .upsert({ ...updated, id: "default" })
-        .select()
-        .single();
-      if (!error && data) {
-        runtimeCMSContent = data as HomepageCMSContent;
+      const rows = await sql`
+        INSERT INTO homepage_cms (
+          id, hero_eyebrow, hero_title_line1, hero_title_line2, hero_description, hero_cta_text, hero_cta_destination,
+          hero_image_url, hero_secondary_image_url, story_heading, story_paragraphs, story_quote, story_image_url,
+          gallery_images, testimonials, footer_tagline, footer_description, updated_at
+        ) VALUES (
+          'default', ${updated.hero_eyebrow}, ${updated.hero_title_line1}, ${updated.hero_title_line2},
+          ${updated.hero_description}, ${updated.hero_cta_text}, ${updated.hero_cta_destination},
+          ${updated.hero_image_url || null}, ${updated.hero_secondary_image_url || null}, ${updated.story_heading},
+          ${JSON.stringify(updated.story_paragraphs)}::jsonb, ${updated.story_quote}, ${updated.story_image_url || null},
+          ${JSON.stringify(updated.gallery_images)}::jsonb, ${JSON.stringify(updated.testimonials)}::jsonb,
+          ${updated.footer_tagline}, ${updated.footer_description}, ${now}
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          hero_eyebrow = EXCLUDED.hero_eyebrow,
+          hero_title_line1 = EXCLUDED.hero_title_line1,
+          hero_title_line2 = EXCLUDED.hero_title_line2,
+          hero_description = EXCLUDED.hero_description,
+          hero_cta_text = EXCLUDED.hero_cta_text,
+          hero_cta_destination = EXCLUDED.hero_cta_destination,
+          hero_image_url = EXCLUDED.hero_image_url,
+          hero_secondary_image_url = EXCLUDED.hero_secondary_image_url,
+          story_heading = EXCLUDED.story_heading,
+          story_paragraphs = EXCLUDED.story_paragraphs,
+          story_quote = EXCLUDED.story_quote,
+          story_image_url = EXCLUDED.story_image_url,
+          gallery_images = EXCLUDED.gallery_images,
+          testimonials = EXCLUDED.testimonials,
+          footer_tagline = EXCLUDED.footer_tagline,
+          footer_description = EXCLUDED.footer_description,
+          updated_at = EXCLUDED.updated_at
+        RETURNING *;
+      `;
+      if (rows && rows.length > 0) {
+        runtimeCMSContent = rows[0] as HomepageCMSContent;
         return runtimeCMSContent;
       }
-    } catch {
-      // Fallback
+    } catch (e) {
+      console.warn("Neon updateHomepageCMSContent failed, using memory:", e);
     }
   }
 
@@ -352,109 +429,64 @@ export async function updateHomepageCMS(
   return updated;
 }
 
+export const getHomepageCMS = getHomepageCMSContent;
+export const updateHomepageCMS = updateHomepageCMSContent;
+
 /**
  * ----------------------------------------------------------------------------
- * LAGOS / DELTA STATE TIMEZONE BUSINESS AVAILABILITY
- * Timezone: Africa/Lagos (UTC+1)
+ * BUSINESS AVAILABILITY
  * ----------------------------------------------------------------------------
  */
-
-export async function checkBusinessAvailability(): Promise<BusinessAvailabilityStatus> {
+export async function getBusinessAvailability(): Promise<BusinessAvailabilityStatus> {
   const settings = await getBusinessSettings();
 
-  // If temporary closure is toggled on, reject unless admin override is active
+  const now = new Date();
+  const lagosOffset = 60 * 60 * 1000;
+  const utc = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
+  const lagosDate = new Date(utc + lagosOffset);
+
+  const days = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ];
+  const currentDay = days[lagosDate.getDay()];
+
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const currentTime = `${pad(lagosDate.getHours())}:${pad(lagosDate.getMinutes())}`;
+
   if (settings.is_temporarily_closed && !settings.allow_ordering_override) {
     return {
       isOpen: false,
       canAcceptOrders: false,
-      reason:
-        settings.temporary_closure_reason ||
-        "The kitchen is temporarily closed for maintenance. Please check back shortly.",
+      reason: settings.temporary_closure_reason || "Currently closed for private culinary preparation.",
       isTemporarilyClosed: true,
-      currentTimeLagos: getCurrentLagosTime(),
-      dayOfWeek: getCurrentLagosDay(),
-    };
-  }
-
-  // Calculate current time in Africa/Lagos
-  const currentLagosTime = getCurrentLagosTime();
-  const currentDay = getCurrentLagosDay();
-
-  // Verify operating day
-  const isOperatingDay = settings.operating_days.includes(currentDay);
-  if (!isOperatingDay && !settings.allow_ordering_override) {
-    return {
-      isOpen: false,
-      canAcceptOrders: false,
-      reason: `Empress Delicacies is closed on ${currentDay}s.`,
-      nextOpening: `Next opening: Monday at ${settings.opening_time}`,
-      isTemporarilyClosed: false,
-      currentTimeLagos: currentLagosTime,
+      currentTimeLagos: currentTime,
       dayOfWeek: currentDay,
     };
   }
 
-  // Check opening & closing hour window
-  const isWithinHours =
-    currentLagosTime >= settings.opening_time && currentLagosTime <= settings.closing_time;
+  const isOperatingDay = (settings.operating_days || []).includes(currentDay);
+  const isOpenHours =
+    currentTime >= settings.opening_time && currentTime <= settings.closing_time;
 
-  if (!isWithinHours && !settings.allow_ordering_override) {
-    return {
-      isOpen: false,
-      canAcceptOrders: false,
-      reason: `We are currently closed. Operating hours are ${settings.opening_time} to ${settings.closing_time} (WAT).`,
-      nextOpening: `We open today/tomorrow at ${settings.opening_time}`,
-      isTemporarilyClosed: false,
-      currentTimeLagos: currentLagosTime,
-      dayOfWeek: currentDay,
-    };
-  }
+  const isOpen = isOperatingDay && isOpenHours;
+  const canAcceptOrders = isOpen || settings.allow_ordering_override;
 
   return {
-    isOpen: true,
-    canAcceptOrders: true,
-    isTemporarilyClosed: false,
-    currentTimeLagos: currentLagosTime,
+    isOpen,
+    canAcceptOrders,
+    reason: !isOpen
+      ? `Hours: ${settings.opening_time} — ${settings.closing_time} (${settings.operating_days?.join(", ")})`
+      : undefined,
+    isTemporarilyClosed: settings.is_temporarily_closed,
+    currentTimeLagos: currentTime,
     dayOfWeek: currentDay,
   };
 }
 
-function getCurrentLagosTime(): string {
-  try {
-    const formatter = new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Africa/Lagos",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-    return formatter.format(new Date());
-  } catch {
-    // Fallback UTC+1
-    const d = new Date();
-    const utcHours = d.getUTCHours() + 1;
-    const hours = (utcHours % 24).toString().padStart(2, "0");
-    const mins = d.getUTCMinutes().toString().padStart(2, "0");
-    return `${hours}:${mins}`;
-  }
-}
-
-function getCurrentLagosDay(): string {
-  try {
-    const formatter = new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Africa/Lagos",
-      weekday: "long",
-    });
-    return formatter.format(new Date());
-  } catch {
-    const days = [
-      "Sunday",
-      "Monday",
-      "Tuesday",
-      "Wednesday",
-      "Thursday",
-      "Friday",
-      "Saturday",
-    ];
-    return days[new Date().getDay()];
-  }
-}
+export const checkBusinessAvailability = getBusinessAvailability;

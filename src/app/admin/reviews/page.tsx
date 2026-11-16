@@ -3,6 +3,9 @@ import { connection } from "next/server";
 import { getAdminReviews, getAdminCustomerFeedback } from "@/lib/reviews/service";
 import { AdminReviewsClient } from "./reviews-client";
 
+export const instant = false;
+
+
 export const metadata = {
   title: "Review Moderation & Feedback | Empress Admin",
   description: "Moderation queue for customer reviews and private quality feedback",

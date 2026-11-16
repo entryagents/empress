@@ -8,7 +8,7 @@ import {
   createCategory,
   updateCategory,
   archiveCategory,
-  seedSupabaseCatalogue,
+  seedCatalogue,
   getProductById,
 } from "@/lib/catalogue/service";
 import { nairaToKobo } from "@/types/catalogue";
@@ -53,12 +53,20 @@ export async function saveProductAction(formData: FormData) {
       short_description,
       full_description,
       base_price_kobo,
+      comparison_price_kobo: null,
+      currency: "NGN",
+      is_initial_benchmark: false,
       min_prep_time_minutes,
       max_prep_time_minutes,
       availability_status: availability_status as any,
       is_available,
       is_featured,
       is_published,
+      is_archived: false,
+      display_order: 1,
+      ingredients: [],
+      allergens: [],
+      dietary_labels: [],
       variants,
       addon_groups,
       images,
@@ -118,6 +126,7 @@ export async function saveCategoryAction(formData: FormData) {
       image_url,
       display_order,
       is_published,
+      is_archived: false,
     };
 
     if (id && id.trim()) {
@@ -158,7 +167,7 @@ export async function toggleCategoryPublishAction(id: string, currentPublished: 
 
 export async function seedCatalogueServerAction() {
   try {
-    const res = await seedSupabaseCatalogue();
+    const res = await seedCatalogue();
     revalidatePath("/menu");
     revalidatePath("/admin/menu");
     revalidatePath("/admin/categories");

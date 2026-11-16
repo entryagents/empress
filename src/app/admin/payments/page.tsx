@@ -1,6 +1,9 @@
 import { getAdminPayments, getAdminPaymentEvents } from "@/lib/payment/service";
 import { AdminPaymentsClient } from "./payments-client";
 
+export const instant = false;
+
+
 export const metadata = {
   title: "Payments & Webhook Audit | Empress Admin",
   description: "Bachs payment transactions, hosted sessions, and webhook delivery audit log.",

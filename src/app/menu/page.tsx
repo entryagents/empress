@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { getCategories, getProducts } from "@/lib/catalogue/service";
 import { MenuClient } from "./menu-client";
 
+export const instant = false;
+
+
 export const metadata: Metadata = {
   title: "Our Menu — Handcrafted Shawarma, Small Chops & Grills",
   description:

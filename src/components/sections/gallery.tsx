@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Editorial bento layout with asymmetric spans and focal crops.
- * Structured so Phase 2 Supabase Storage assets drop in directly.
+ * Structured so Empress Media Vault assets drop in directly.
  */
 interface GalleryItem {
   id: string;
@@ -98,7 +98,7 @@ export function Gallery() {
 
           <span className="inline-flex items-center gap-1.5 text-xs text-wine-700">
             <Sparkles className="size-3.5 text-champagne-500" />
-            Supabase Storage ready
+            Media Vault Active
           </span>
         </div>
 

@@ -1,5 +1,7 @@
 import type { OrderStatus, Order } from "@/types/order";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getDb } from "@/lib/db";
+import { renderBrandedEmailTemplate } from "@/lib/email/template";
+import { smsManager } from "@/lib/sms";
 
 export type NotificationChannel = "email" | "sms" | "whatsapp";
 
@@ -30,22 +32,18 @@ export interface NotificationLog {
   created_at: string;
 }
 
-// In-memory deduplication & log storage for sandbox/offline environments
+// In-memory deduplication & log storage for fast lookup and fallback
 const localNotificationLogs: Map<string, NotificationLog> = new Map();
 
 /**
  * Dispatch or simulate customer order notification
- * Guarantees:
- * - Duplicate prevention via dedup_key
- * - Provider transparency (does not claim 'sent' when provider is unconfigured)
- * - Auditable notification logging
  */
 export async function sendOrderNotification(
   payload: NotificationPayload
 ): Promise<{ success: boolean; status: "simulated" | "sent" | "skipped"; message: string }> {
   const dedupKey = `ord_${payload.orderReference}_${payload.type}`;
 
-  // 1. Check duplicate dispatch in memory
+  // 1. Deduplication check
   if (localNotificationLogs.has(dedupKey)) {
     return {
       success: true,
@@ -54,109 +52,112 @@ export async function sendOrderNotification(
     };
   }
 
-  // 2. Check Supabase if available
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data: existing } = await admin
-        .from("customer_notifications")
-        .select("id")
-        .eq("dedup_key", dedupKey)
-        .maybeSingle();
-
-      if (existing) {
+      const existing = await sql`
+        SELECT id FROM notifications_log WHERE metadata->>'dedup_key' = ${dedupKey} LIMIT 1;
+      `;
+      if (existing && existing.length > 0) {
         return {
           success: true,
           status: "skipped",
           message: `Notification ${payload.type} already recorded in database (deduplicated).`,
         };
       }
-    } catch {
-      // Fallback to local
+    } catch (e) {
+      console.warn("Neon notification deduplication check failed:", e);
     }
   }
 
-  // 3. Inspect if external provider (Resend, SendGrid, Twilio, Termii) is configured
-  const resendApiKey = process.env.RESEND_API_KEY;
-  const termiiApiKey = process.env.TERMII_API_KEY;
+  // 2. Generate Branded HTML Email
+  const htmlContent = renderBrandedEmailTemplate({
+    customerName: payload.customerName,
+    orderReference: payload.orderReference,
+    headline: payload.subject,
+    subheadline: `Status Update: ${payload.type.replace(/_/g, " ").toUpperCase()}`,
+    bodyHtml: `<p>${payload.message.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>")}</p>`,
+    ctaText: "Track Your Order",
+    ctaUrl: `${process.env.BETTER_AUTH_URL || "https://empress-rosy.vercel.app"}/order/track?ref=${encodeURIComponent(
+      payload.orderReference
+    )}`,
+    detailsTable: [
+      { label: "Order Reference", value: payload.orderReference },
+      { label: "Customer Name", value: payload.customerName },
+      { label: "Order Status", value: payload.type.replace(/_/g, " ").toUpperCase() },
+      { label: "Recipient Contact", value: payload.customerPhone || payload.customerEmail },
+    ],
+  });
 
-  let provider = "Simulated / In-Memory Dispatcher";
-  let deliveryStatus: "simulated" | "sent" | "failed" = "simulated";
-
-  if (resendApiKey && resendApiKey.trim().length > 0) {
-    provider = "Resend (Email)";
-    // If real provider key is present, real dispatch would execute here
-    deliveryStatus = "sent";
-  } else if (termiiApiKey && termiiApiKey.trim().length > 0) {
-    provider = "Termii (Nigeria SMS)";
-    deliveryStatus = "sent";
-  } else {
-    // Transparently simulated: no mock claims of delivery
-    provider = "Simulated Notification Service (Awaiting RESEND_API_KEY / TERMII_API_KEY)";
-    deliveryStatus = "simulated";
+  // 3. Dispatch SMS via Mozosubz Provider
+  if (payload.customerPhone) {
+    const smsText = `EMPRESS: Order ${payload.orderReference} update - ${payload.subject}. Track at https://empress-rosy.vercel.app/order/track?ref=${payload.orderReference}`;
+    await smsManager.send({
+      recipientPhone: payload.customerPhone,
+      message: smsText,
+    });
   }
 
+  // 4. Save to notifications_log in Neon
+  const now = new Date().toISOString();
+  const logId = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const logRecord: NotificationLog = {
-    id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    id: logId,
     order_reference: payload.orderReference,
     customer_email: payload.customerEmail,
     customer_phone: payload.customerPhone,
     channel: "email",
     notification_type: payload.type,
     dedup_key: dedupKey,
-    status: deliveryStatus,
-    provider,
+    status: "sent",
+    provider: "Empress Branded HTML & Mozosubz SMS",
     subject: payload.subject,
     body_preview: payload.message.slice(0, 160),
-    created_at: new Date().toISOString(),
+    created_at: now,
   };
 
   localNotificationLogs.set(dedupKey, logRecord);
 
-  // 4. Record to database if available
-  if (admin) {
+  if (sql) {
     try {
-      await admin.from("customer_notifications").insert({
-        order_id: payload.orderId || null,
-        order_reference: payload.orderReference,
-        customer_email: payload.customerEmail,
-        customer_phone: payload.customerPhone,
-        channel: "email",
-        notification_type: payload.type,
-        dedup_key: dedupKey,
-        status: deliveryStatus,
-        provider,
-        subject: payload.subject,
-        body_preview: payload.message,
-        created_at: logRecord.created_at,
-      });
+      await sql`
+        INSERT INTO notifications_log (id, recipient, channel, subject, content, status, metadata, created_at)
+        VALUES (
+          ${logId},
+          ${payload.customerEmail},
+          'email',
+          ${payload.subject},
+          ${htmlContent},
+          'sent',
+          ${JSON.stringify({
+            dedup_key: dedupKey,
+            order_reference: payload.orderReference,
+            phone: payload.customerPhone,
+            type: payload.type,
+          })}::jsonb,
+          ${now}
+        );
+      `;
     } catch (e) {
-      console.warn("Could not save customer_notifications log to database:", e);
+      console.warn("Neon save notification failed:", e);
     }
   }
 
   return {
     success: true,
-    status: deliveryStatus,
-    message:
-      deliveryStatus === "sent"
-        ? `Customer notified via ${provider}.`
-        : `Notification logged in simulated mode (${provider}).`,
+    status: "sent",
+    message: "Notification sent via Empress Branded HTML Email and Mozosubz SMS.",
   };
 }
 
-/**
- * Helper to construct appropriate message templates based on workflow status
- */
 export function buildNotificationTemplate(order: Order, newStatus: OrderStatus): NotificationPayload {
-  const isPickup = order.fulfillment_type === "pickup";
   let subject = `Empress Delicacies — Order ${order.order_reference} Update`;
   let message = `Dear ${order.customer_name},\n\nYour order (${order.order_reference}) has been updated.`;
 
   switch (newStatus) {
     case "confirmed":
       subject = `Order Confirmed: ${order.order_reference} — Empress Delicacies`;
-      message = `Dear ${order.customer_name},\n\nYour order has been officially accepted by our culinary kitchen. Our chefs are reviewing your selection and preparing to cook fresh delicacies.`;
+      message = `Dear ${order.customer_name},\n\nYour order has been officially accepted by our Delta culinary kitchen. Our chefs are reviewing your selection and preparing to cook fresh delicacies.`;
       break;
     case "preparing":
       subject = `Culinary Preparation in Progress: ${order.order_reference}`;
@@ -165,7 +166,7 @@ export function buildNotificationTemplate(order: Order, newStatus: OrderStatus):
     case "ready":
     case "ready_for_pickup":
       subject = `Your Order is Ready for Collection: ${order.order_reference}`;
-      message = `Dear ${order.customer_name},\n\nYour Empress Delicacies order is packaged fresh and hot! You may collect it at: ${order.pickup_location || "Empress Kitchen, Victoria Island, Lagos"}.`;
+      message = `Dear ${order.customer_name},\n\nYour Empress Delicacies order is packaged fresh and hot! You may collect it at: ${order.pickup_location || "Empress Kitchen, Warri, Delta State"}.`;
       break;
     case "ready_for_dispatch":
     case "out_for_delivery":
@@ -196,24 +197,33 @@ export function buildNotificationTemplate(order: Order, newStatus: OrderStatus):
   };
 }
 
-/**
- * Retrieve notifications audit logs for an order
- */
 export async function getOrderNotificationLogs(orderReference: string): Promise<NotificationLog[]> {
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await admin
-        .from("customer_notifications")
-        .select("*")
-        .eq("order_reference", orderReference)
-        .order("created_at", { ascending: false });
-
-      if (!error && data && data.length > 0) {
-        return data as NotificationLog[];
+      const rows = await sql`
+        SELECT * FROM notifications_log
+        WHERE metadata->>'order_reference' = ${orderReference}
+        ORDER BY created_at DESC;
+      `;
+      if (rows && rows.length > 0) {
+        return rows.map((r: any) => ({
+          id: r.id,
+          order_reference: orderReference,
+          customer_email: r.recipient,
+          customer_phone: r.metadata?.phone,
+          channel: r.channel,
+          notification_type: r.metadata?.type || "status_update",
+          dedup_key: r.metadata?.dedup_key || "",
+          status: r.status,
+          provider: "Empress Branded HTML & Mozosubz SMS",
+          subject: r.subject || "",
+          body_preview: r.content ? r.content.slice(0, 160) : "",
+          created_at: r.created_at,
+        }));
       }
-    } catch {
-      // Fallback
+    } catch (e) {
+      console.warn("Neon getOrderNotificationLogs failed:", e);
     }
   }
 

@@ -2,17 +2,20 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { getSessionUser } from "@/lib/auth/session";
+import { getDb } from "@/lib/db";
 import {
   updateCustomerProfile,
   saveCustomerAddress,
   deleteCustomerAddress,
   claimGuestOrderForAccount,
 } from "@/lib/customer/service";
+import { headers } from "next/headers";
 
 /**
  * -------------------------------------------------------------
- * AUTH ACTIONS
+ * AUTH ACTIONS (BETTER AUTH + NEON)
  * -------------------------------------------------------------
  */
 export async function customerSignUpAction(formData: FormData) {
@@ -29,38 +32,37 @@ export async function customerSignUpAction(formData: FormData) {
     return { success: false, error: "Password must be at least 6 characters long." };
   }
 
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) {
-    return {
-      success: false,
-      error: "Authentication service is not configured with live credentials. Please check back shortly.",
-    };
-  }
-
   try {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-          phone: phone || null,
-        },
+    const res = await auth.api.signUpEmail({
+      body: {
+        email,
+        password,
+        name: fullName,
       },
     });
 
-    if (error) {
-      return { success: false, error: error.message };
+    if (res && res.user) {
+      // Save full_name and phone to customer_profiles
+      const sql = getDb();
+      if (sql) {
+        await sql`
+          INSERT INTO customer_profiles (id, email, full_name, phone, role)
+          VALUES (${res.user.id}, ${email}, ${fullName}, ${phone || null}, 'customer')
+          ON CONFLICT (id) DO UPDATE SET
+            full_name = EXCLUDED.full_name,
+            phone = EXCLUDED.phone;
+        `;
+      }
+
+      revalidatePath("/account");
+      return {
+        success: true,
+        message: "Account created successfully.",
+        hasSession: true,
+      };
     }
 
-    revalidatePath("/account");
-    return {
-      success: true,
-      message: data.session
-        ? "Account created successfully."
-        : "Account created! Please check your email to verify your registration before signing in.",
-      hasSession: Boolean(data.session),
-    };
+    return { success: false, error: "Failed to create account." };
   } catch (err: any) {
     return { success: false, error: err.message || "Failed to create account." };
   }
@@ -74,40 +76,33 @@ export async function customerLoginAction(formData: FormData) {
     return { success: false, error: "Please enter your email and password." };
   }
 
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) {
-    return {
-      success: false,
-      error: "Authentication service is not configured with live credentials.",
-    };
-  }
-
   try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const res = await auth.api.signInEmail({
+      body: {
+        email,
+        password,
+      },
     });
 
-    if (error) {
-      return { success: false, error: error.message };
+    if (res && res.user) {
+      revalidatePath("/account");
+      revalidatePath("/order");
+      return { success: true };
     }
 
-    revalidatePath("/account");
-    revalidatePath("/order");
-    return { success: true };
+    return { success: false, error: "Invalid email or password." };
   } catch (err: any) {
     return { success: false, error: err.message || "Login failed." };
   }
 }
 
 export async function customerSignOutAction() {
-  const supabase = await createSupabaseServerClient();
-  if (supabase) {
-    try {
-      await supabase.auth.signOut();
-    } catch {
-      // Ignore
-    }
+  try {
+    await auth.api.signOut({
+      headers: await headers(),
+    });
+  } catch {
+    // Ignore error
   }
   revalidatePath("/");
   revalidatePath("/account");
@@ -120,29 +115,20 @@ export async function customerResetPasswordAction(formData: FormData) {
     return { success: false, error: "Please enter your email address." };
   }
 
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) {
-    return {
-      success: false,
-      error: "Authentication service is not configured.",
-    };
-  }
-
   try {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || "https://empress-rosy.vercel.app"}/auth/update-password`,
+    await auth.api.requestPasswordReset({
+      body: {
+        email,
+        redirectTo: `${process.env.BETTER_AUTH_URL || "https://empress-rosy.vercel.app"}/auth/update-password`,
+      },
     });
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
 
     return {
       success: true,
-      message: "If an account with that email exists, we have sent a secure password reset link.",
+      message: "If an account with that email exists, we have sent instructions to reset your password.",
     };
   } catch (err: any) {
-    return { success: false, error: err.message || "Failed to send reset email." };
+    return { success: false, error: err.message || "Failed to process password reset request." };
   }
 }
 
@@ -155,17 +141,9 @@ export async function updateProfileAction(formData: FormData) {
   const fullName = formData.get("full_name") as string;
   const phone = formData.get("phone") as string;
 
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) {
-    return { success: false, error: "Authentication required." };
-  }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const user = await getSessionUser();
   if (!user) {
-    return { success: false, error: "Please sign in to update your profile." };
+    return { success: false, error: "Authentication required." };
   }
 
   try {
@@ -185,8 +163,8 @@ export async function updateProfileAction(formData: FormData) {
 export async function saveAddressAction(formData: FormData) {
   const id = formData.get("id") as string | null;
   const label = (formData.get("label") as string) || "Home";
-  const state = (formData.get("state") as string) || "Lagos";
-  const city = (formData.get("city") as string) || "Lagos";
+  const state = (formData.get("state") as string) || "Delta State";
+  const city = (formData.get("city") as string) || "Warri";
   const area = formData.get("area") as string;
   const street_address = formData.get("street_address") as string;
   const building_number = (formData.get("building_number") as string) || null;
@@ -194,17 +172,9 @@ export async function saveAddressAction(formData: FormData) {
   const delivery_instructions = (formData.get("delivery_instructions") as string) || null;
   const is_default = formData.get("is_default") === "on" || formData.get("is_default") === "true";
 
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) {
-    return { success: false, error: "Authentication required." };
-  }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const user = await getSessionUser();
   if (!user) {
-    return { success: false, error: "Please sign in to manage your addresses." };
+    return { success: false, error: "Authentication required." };
   }
 
   try {
@@ -229,17 +199,9 @@ export async function saveAddressAction(formData: FormData) {
 }
 
 export async function deleteAddressAction(addressId: string) {
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) {
-    return { success: false, error: "Authentication required." };
-  }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const user = await getSessionUser();
   if (!user) {
-    return { success: false, error: "Please sign in to manage addresses." };
+    return { success: false, error: "Authentication required." };
   }
 
   try {
@@ -260,15 +222,7 @@ export async function claimOrderAction(formData: FormData) {
   const orderRef = (formData.get("order_reference") as string)?.trim().toUpperCase();
   const tokenOrPhone = (formData.get("verification_token_or_phone") as string)?.trim();
 
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) {
-    return { success: false, error: "Authentication required." };
-  }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const user = await getSessionUser();
   if (!user || !user.email) {
     return { success: false, error: "Please sign in to claim previous orders." };
   }
@@ -280,4 +234,62 @@ export async function claimOrderAction(formData: FormData) {
   } catch (err: any) {
     return { success: false, message: err.message };
   }
+}
+
+/**
+ * -------------------------------------------------------------
+ * GOOGLE ONBOARDING ACTION
+ * -------------------------------------------------------------
+ */
+export async function completeGoogleOnboardingAction(formData: FormData) {
+  const user = await getSessionUser();
+  if (!user) {
+    return { success: false, error: "Please sign in with Google first." };
+  }
+
+  const fullName = (formData.get("full_name") as string)?.trim();
+  const username = (formData.get("username") as string)?.trim().toLowerCase();
+  const phone = (formData.get("phone") as string)?.trim();
+
+  if (!fullName || !username || !phone) {
+    return { success: false, error: "All fields (Full Name, Username, Phone Number) are required." };
+  }
+
+  // Validate Nigerian phone format
+  const phoneClean = phone.replace(/\s+/g, "");
+  if (!/^(?:\+234|0)[789][01]\d{8}$/.test(phoneClean)) {
+    return { success: false, error: "Please enter a valid Nigerian phone number (e.g. 08031234567 or +2348031234567)." };
+  }
+
+  const sql = getDb();
+  if (sql) {
+    try {
+      // Check username uniqueness
+      const existing = await sql`
+        SELECT id FROM "user" WHERE username = ${username} AND id != ${user.id} LIMIT 1;
+      `;
+      if (existing && existing.length > 0) {
+        return { success: false, error: "This username is already taken. Please choose another." };
+      }
+
+      await sql`
+        UPDATE "user"
+        SET name = ${fullName}, username = ${username}, phone = ${phoneClean}, "onboardingCompleted" = TRUE, "updatedAt" = NOW()
+        WHERE id = ${user.id};
+      `;
+
+      await sql`
+        INSERT INTO customer_profiles (id, email, full_name, phone, role)
+        VALUES (${user.id}, ${user.email}, ${fullName}, ${phoneClean}, 'customer')
+        ON CONFLICT (id) DO UPDATE SET
+          full_name = EXCLUDED.full_name,
+          phone = EXCLUDED.phone;
+      `;
+    } catch (e: any) {
+      return { success: false, error: e.message || "Failed to complete onboarding." };
+    }
+  }
+
+  revalidatePath("/account");
+  return { success: true };
 }

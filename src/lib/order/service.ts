@@ -12,8 +12,7 @@ import type {
 } from "@/types/order";
 import { getProducts, getProductById } from "@/lib/catalogue/service";
 import { CONFIGURED_DELIVERY_ZONES, CONFIGURED_COUPONS, DEFAULT_PICKUP_LOCATION } from "./config";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getDb } from "@/lib/db";
 import crypto from "node:crypto";
 
 // Runtime in-memory store for orders and coupons
@@ -67,28 +66,7 @@ export async function validateCoupon(
   }
 
   const cleanCode = code.trim().toUpperCase();
-  const supabase = getSupabaseServerClient();
-  let coupon: Coupon | undefined;
-
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from("coupons")
-        .select("*")
-        .ilike("code", cleanCode)
-        .eq("is_active", true)
-        .single();
-      if (!error && data) {
-        coupon = data as Coupon;
-      }
-    } catch {
-      // Fallback
-    }
-  }
-
-  if (!coupon) {
-    coupon = runtimeCoupons.find((c) => c.code.toUpperCase() === cleanCode && c.is_active);
-  }
+  const coupon = runtimeCoupons.find((c) => c.code.toUpperCase() === cleanCode && c.is_active);
 
   if (!coupon) {
     return { isValid: false, discountKobo: 0, reason: "Invalid or inactive privilege code." };
@@ -467,86 +445,57 @@ export async function createOrder(
       items: itemSnapshots,
     };
 
-    // Attempt Supabase insert if configured
-    const admin = getSupabaseAdminClient();
-    if (admin) {
+    // Persist order and items to Neon PostgreSQL
+    const sql = getDb();
+    if (sql) {
       try {
-        const { error: orderErr } = await admin.from("orders").insert([
-          {
-            id: newOrder.id,
-            order_reference: newOrder.order_reference,
-            secure_access_token: newOrder.secure_access_token,
-            customer_name: newOrder.customer_name,
-            customer_email: newOrder.customer_email,
-            customer_phone: newOrder.customer_phone,
-            user_id: newOrder.user_id,
-            fulfillment_type: newOrder.fulfillment_type,
-            delivery_state: newOrder.delivery_state,
-            delivery_city: newOrder.delivery_city,
-            delivery_area: newOrder.delivery_area,
-            delivery_street_address: newOrder.delivery_street_address,
-            delivery_building_number: newOrder.delivery_building_number,
-            delivery_landmark: newOrder.delivery_landmark,
-            delivery_instructions: newOrder.delivery_instructions,
-            delivery_zone_id: newOrder.delivery_zone_id,
-            pickup_location: newOrder.pickup_location,
-            pickup_instructions: newOrder.pickup_instructions,
-            currency: newOrder.currency,
-            subtotal_kobo: newOrder.subtotal_kobo,
-            delivery_fee_kobo: newOrder.delivery_fee_kobo,
-            discount_kobo: newOrder.discount_kobo,
-            coupon_code: newOrder.coupon_code,
-            coupon_id: newOrder.coupon_id,
-            total_kobo: newOrder.total_kobo,
-            status: newOrder.status,
-            payment_status: newOrder.payment_status,
-            special_instructions: newOrder.special_instructions,
-            idempotency_key: newOrder.idempotency_key,
-            created_at: newOrder.created_at,
-            updated_at: newOrder.updated_at,
-          },
-        ]);
+        await sql`
+          INSERT INTO orders (
+            id, order_reference, secure_access_token, customer_name, customer_email,
+            customer_phone, user_id, fulfillment_type, delivery_state, delivery_city,
+            delivery_area, delivery_street_address, delivery_building_number,
+            delivery_landmark, delivery_instructions, delivery_zone_id, pickup_location,
+            pickup_instructions, currency, subtotal_kobo, delivery_fee_kobo, discount_kobo,
+            coupon_code, coupon_id, total_kobo, status, payment_status, special_instructions,
+            idempotency_key, created_at, updated_at
+          ) VALUES (
+            ${newOrder.id}, ${newOrder.order_reference}, ${newOrder.secure_access_token},
+            ${newOrder.customer_name}, ${newOrder.customer_email}, ${newOrder.customer_phone},
+            ${newOrder.user_id || null}, ${newOrder.fulfillment_type}, ${newOrder.delivery_state || null},
+            ${newOrder.delivery_city || null}, ${newOrder.delivery_area || null},
+            ${newOrder.delivery_street_address || null}, ${newOrder.delivery_building_number || null},
+            ${newOrder.delivery_landmark || null}, ${newOrder.delivery_instructions || null},
+            ${newOrder.delivery_zone_id || null}, ${newOrder.pickup_location || null},
+            ${newOrder.pickup_instructions || null}, 'NGN', ${newOrder.subtotal_kobo},
+            ${newOrder.delivery_fee_kobo}, ${newOrder.discount_kobo}, ${newOrder.coupon_code || null},
+            ${newOrder.coupon_id || null}, ${newOrder.total_kobo}, ${newOrder.status},
+            ${newOrder.payment_status}, ${newOrder.special_instructions || null},
+            ${newOrder.idempotency_key || null}, ${now}, ${now}
+          )
+          ON CONFLICT (id) DO NOTHING;
+        `;
 
-        if (!orderErr) {
-          // Insert items
-          for (const item of itemSnapshots) {
-            await admin.from("order_items").insert([
-              {
-                id: item.id,
-                order_id: item.order_id,
-                product_id: item.product_id,
-                product_name: item.product_name,
-                product_sku: item.product_sku,
-                product_image_url: item.product_image_url,
-                category_name: item.category_name,
-                variant_id: item.variant_id,
-                variant_name: item.variant_name,
-                variant_price_adjustment_kobo: item.variant_price_adjustment_kobo,
-                base_price_kobo: item.base_price_kobo,
-                addons_total_kobo: item.addons_total_kobo,
-                unit_price_kobo: item.unit_price_kobo,
-                quantity: item.quantity,
-                total_price_kobo: item.total_price_kobo,
-                special_instructions: item.special_instructions,
-              },
-            ]);
-
-            for (const add of item.addons || []) {
-              await admin.from("order_item_addons").insert([
-                {
-                  id: add.id,
-                  order_item_id: item.id,
-                  addon_id: add.addon_id,
-                  addon_group_name: add.addon_group_name,
-                  addon_name: add.addon_name,
-                  price_kobo: add.price_kobo,
-                },
-              ]);
-            }
-          }
+        for (const item of itemSnapshots) {
+          await sql`
+            INSERT INTO order_items (
+              id, order_id, product_id, product_name, product_sku, product_image_url,
+              category_name, variant_id, variant_name, variant_price_adjustment_kobo,
+              base_price_kobo, addons_total_kobo, unit_price_kobo, quantity,
+              total_price_kobo, special_instructions, addons, created_at
+            ) VALUES (
+              ${item.id}, ${item.order_id}, ${item.product_id}, ${item.product_name},
+              ${item.product_sku || null}, ${item.product_image_url}, ${item.category_name},
+              ${item.variant_id || null}, ${item.variant_name || null},
+              ${item.variant_price_adjustment_kobo}, ${item.base_price_kobo},
+              ${item.addons_total_kobo}, ${item.unit_price_kobo}, ${item.quantity},
+              ${item.total_price_kobo}, ${item.special_instructions || null},
+              ${JSON.stringify(item.addons || [])}::jsonb, ${now}
+            )
+            ON CONFLICT (id) DO NOTHING;
+          `;
         }
-      } catch {
-        // Fallback to runtime
+      } catch (e) {
+        console.warn("Neon order persistence notice, maintained in memory:", e);
       }
     }
 
@@ -577,22 +526,49 @@ export async function getOrderByReferenceAndToken(
 ): Promise<Order | null> {
   const cleanRef = reference.trim().toUpperCase();
 
-  // Try DB first
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  // Try Neon PostgreSQL first
+  const sql = getDb();
+  if (sql) {
     try {
-      let query = admin.from("orders").select("*, items:order_items(*)").eq("order_reference", cleanRef);
-      if (token) {
-        query = query.eq("secure_access_token", token);
-      } else if (phone) {
-        query = query.eq("customer_phone", phone.trim());
+      const rows = await sql`
+        SELECT o.*,
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'id', oi.id,
+                'order_id', oi.order_id,
+                'product_id', oi.product_id,
+                'product_name', oi.product_name,
+                'product_sku', oi.product_sku,
+                'product_image_url', oi.product_image_url,
+                'category_name', oi.category_name,
+                'variant_id', oi.variant_id,
+                'variant_name', oi.variant_name,
+                'variant_price_adjustment_kobo', oi.variant_price_adjustment_kobo,
+                'base_price_kobo', oi.base_price_kobo,
+                'addons_total_kobo', oi.addons_total_kobo,
+                'unit_price_kobo', oi.unit_price_kobo,
+                'quantity', oi.quantity,
+                'total_price_kobo', oi.total_price_kobo,
+                'special_instructions', oi.special_instructions,
+                'addons', oi.addons
+              )
+            ) FILTER (WHERE oi.id IS NOT NULL),
+            '[]'::json
+          ) as items
+        FROM orders o
+        LEFT JOIN order_items oi ON o.id = oi.order_id
+        WHERE UPPER(o.order_reference) = ${cleanRef}
+          AND (${token || null}::text IS NULL OR o.secure_access_token = ${token || ""})
+          AND (${phone || null}::text IS NULL OR o.customer_phone = ${phone || ""})
+        GROUP BY o.id
+        LIMIT 1;
+      `;
+      if (rows && rows.length > 0) {
+        return rows[0] as Order;
       }
-      const { data, error } = await query.single();
-      if (!error && data) {
-        return data as Order;
-      }
-    } catch {
-      // Fallback
+    } catch (e) {
+      console.warn("Neon getOrderByReference notice, falling back:", e);
     }
   }
 
@@ -618,19 +594,46 @@ export async function getOrderByReferenceAndToken(
  * -------------------------------------------------------------
  */
 export async function getAdminOrders(limit = 50): Promise<Order[]> {
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await admin
-        .from("orders")
-        .select("*, items:order_items(*)")
-        .order("created_at", { ascending: false })
-        .limit(limit);
-      if (!error && data && data.length > 0) {
-        return data as Order[];
+      const rows = await sql`
+        SELECT o.*,
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'id', oi.id,
+                'order_id', oi.order_id,
+                'product_id', oi.product_id,
+                'product_name', oi.product_name,
+                'product_sku', oi.product_sku,
+                'product_image_url', oi.product_image_url,
+                'category_name', oi.category_name,
+                'variant_id', oi.variant_id,
+                'variant_name', oi.variant_name,
+                'variant_price_adjustment_kobo', oi.variant_price_adjustment_kobo,
+                'base_price_kobo', oi.base_price_kobo,
+                'addons_total_kobo', oi.addons_total_kobo,
+                'unit_price_kobo', oi.unit_price_kobo,
+                'quantity', oi.quantity,
+                'total_price_kobo', oi.total_price_kobo,
+                'special_instructions', oi.special_instructions,
+                'addons', oi.addons
+              )
+            ) FILTER (WHERE oi.id IS NOT NULL),
+            '[]'::json
+          ) as items
+        FROM orders o
+        LEFT JOIN order_items oi ON o.id = oi.order_id
+        GROUP BY o.id
+        ORDER BY o.created_at DESC
+        LIMIT ${limit};
+      `;
+      if (rows && rows.length > 0) {
+        return rows as Order[];
       }
-    } catch {
-      // Fallback
+    } catch (e) {
+      console.warn("Neon getAdminOrders notice, falling back:", e);
     }
   }
 
@@ -713,24 +716,32 @@ export async function updateAdminOrderStatus(params: {
     updatePayload.cancelled_by = params.changedByName || "Staff";
   }
 
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      await admin.from("orders").update(updatePayload).eq("order_reference", cleanRef);
+      await sql`
+        UPDATE orders SET
+          status = ${params.newStatus},
+          updated_at = ${now},
+          cancellation_reason = COALESCE(${params.cancellationReason || null}, cancellation_reason),
+          cancelled_at = ${params.newStatus === "cancelled" ? now : null},
+          cancelled_by = COALESCE(${params.changedByName || null}, cancelled_by)
+        WHERE UPPER(order_reference) = ${cleanRef};
+      `;
 
-      // Record audit timeline entry
-      await admin.from("order_status_history").insert({
-        order_id: order.id,
-        order_reference: cleanRef,
-        from_status: order.status,
-        to_status: params.newStatus,
-        changed_by_user_id: params.changedByUserId || null,
-        changed_by_name: params.changedByName || "Staff Administrator",
-        notes: params.notes || (params.newStatus === "cancelled" ? params.cancellationReason : null),
-        created_at: now,
-      });
+      await sql`
+        INSERT INTO order_status_history (
+          id, order_id, order_reference, from_status, to_status, changed_by_user_id, changed_by_name, notes, created_at
+        ) VALUES (
+          ${`hist-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`},
+          ${order.id}, ${cleanRef}, ${order.status}, ${params.newStatus},
+          ${params.changedByUserId || null}, ${params.changedByName || "Staff Administrator"},
+          ${params.notes || (params.newStatus === "cancelled" ? params.cancellationReason : null)},
+          ${now}
+        );
+      `;
     } catch (e) {
-      console.warn("Could not write order update to Supabase, updating memory:", e);
+      console.warn("Neon order status update notice, maintained in memory:", e);
     }
   }
 
@@ -780,15 +791,17 @@ export async function updateAdminOrderNotes(
   const cleanRef = orderReference.trim().toUpperCase();
   const now = new Date().toISOString();
 
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      await admin
-        .from("orders")
-        .update({ admin_notes: adminNotes, updated_at: now })
-        .eq("order_reference", cleanRef);
+      await sql`
+        UPDATE orders SET
+          admin_notes = ${adminNotes},
+          updated_at = ${now}
+        WHERE UPPER(order_reference) = ${cleanRef};
+      `;
     } catch (e) {
-      console.warn("Could not save admin notes to Supabase:", e);
+      console.warn("Could not save admin notes to Neon:", e);
     }
   }
 
@@ -806,21 +819,20 @@ export async function updateAdminOrderNotes(
  */
 export async function getOrderStatusHistory(orderReference: string): Promise<any[]> {
   const cleanRef = orderReference.trim().toUpperCase();
-  const admin = getSupabaseAdminClient();
+  const sql = getDb();
 
-  if (admin) {
+  if (sql) {
     try {
-      const { data, error } = await admin
-        .from("order_status_history")
-        .select("*")
-        .eq("order_reference", cleanRef)
-        .order("created_at", { ascending: false });
-
-      if (!error && data && data.length > 0) {
-        return data;
+      const rows = await sql`
+        SELECT * FROM order_status_history
+        WHERE UPPER(order_reference) = ${cleanRef}
+        ORDER BY created_at DESC;
+      `;
+      if (rows && rows.length > 0) {
+        return rows;
       }
-    } catch {
-      // Fallback
+    } catch (e) {
+      console.warn("Neon getOrderStatusHistory notice, falling back:", e);
     }
   }
 

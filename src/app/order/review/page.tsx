@@ -5,6 +5,9 @@ import { PostOrderFeedbackClient } from "./review-client";
 import Link from "next/link";
 import { AlertCircle } from "lucide-react";
 
+export const instant = false;
+
+
 export const metadata = {
   title: "Review Your Order | Empress Delicacies",
   description: "Share your rating and food review for your recent Empress Delicacies order",

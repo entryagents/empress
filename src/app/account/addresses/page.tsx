@@ -1,6 +1,9 @@
 import { getCurrentCustomer, getCustomerAddresses } from "@/lib/customer/service";
 import { AddressesClient } from "./addresses-client";
 
+export const instant = false;
+
+
 export const metadata = {
   title: "Saved Delivery Addresses | Empress Delicacies",
 };

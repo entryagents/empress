@@ -5,6 +5,9 @@ import { CustomerTrackingClient } from "./tracking-client";
 import Link from "next/link";
 import { AlertCircle } from "lucide-react";
 
+export const instant = false;
+
+
 export const metadata = {
   title: "Live Order Tracking | Empress Delicacies",
   description: "Real-time delivery progress and live courier GPS location tracking",

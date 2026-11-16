@@ -8,14 +8,12 @@ import type {
   ProductFilterParams,
 } from "@/types/catalogue";
 import { SEED_CATEGORIES, SEED_PRODUCTS } from "./seed-data";
-import { getSupabaseServerClient, isSupabaseConfigured } from "@/lib/supabase/server";
-import { getSupabaseAdminClient, isSupabaseAdminConfigured } from "@/lib/supabase/admin";
+import { getDb } from "@/lib/db";
 
 // In-memory runtime store used as resilient cache and fallback
 let runtimeCategories: Category[] = [...SEED_CATEGORIES];
 let runtimeProducts: Product[] = [...SEED_PRODUCTS];
 
-// Attach category pointers to products
 function enrichProduct(p: Product): Product {
   const cat = runtimeCategories.find((c) => c.id === p.category_id || c.slug === p.category_id);
   return {
@@ -26,27 +24,25 @@ function enrichProduct(p: Product): Product {
 
 /**
  * -------------------------------------------------------------
- * CATEGORY OPERATIONS
+ * CATEGORY OPERATIONS (NEON POSTGRESQL + CACHE)
  * -------------------------------------------------------------
  */
 export async function getCategories(includeUnpublished = false): Promise<Category[]> {
-  const supabase = getSupabaseServerClient();
-  if (supabase) {
+  const sql = getDb();
+  if (sql) {
     try {
-      let query = supabase.from("categories").select("*").eq("is_archived", false);
-      if (!includeUnpublished) {
-        query = query.eq("is_published", true);
+      const rows = includeUnpublished
+        ? await sql`SELECT * FROM categories WHERE is_archived = FALSE ORDER BY display_order ASC;`
+        : await sql`SELECT * FROM categories WHERE is_archived = FALSE AND is_published = TRUE ORDER BY display_order ASC;`;
+
+      if (rows && rows.length > 0) {
+        return rows as Category[];
       }
-      const { data, error } = await query.order("display_order", { ascending: true });
-      if (!error && data && data.length > 0) {
-        return data as Category[];
-      }
-    } catch {
-      // Supabase fetch failure, fall back to runtime
+    } catch (e) {
+      console.warn("Neon getCategories failed, using memory:", e);
     }
   }
 
-  // Runtime fallback
   return runtimeCategories
     .filter((c) => !c.is_archived && (includeUnpublished || c.is_published))
     .sort((a, b) => a.display_order - b.display_order)
@@ -61,30 +57,41 @@ export async function getCategoryBySlug(slug: string): Promise<Category | null> 
   return cats.find((c) => c.slug === slug) || null;
 }
 
-export async function createCategory(input: Partial<Category>): Promise<Category> {
+export async function getCategoryById(id: string): Promise<Category | null> {
+  const cats = await getCategories(true);
+  return cats.find((c) => c.id === id) || null;
+}
+
+export async function createCategory(input: Omit<Category, "id" | "created_at" | "updated_at">): Promise<Category> {
+  const now = new Date().toISOString();
+  const id = `cat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const newCat: Category = {
-    id: input.id || `cat-${Date.now()}`,
-    name: input.name || "New Category",
-    slug: input.slug || `cat-${Date.now()}`,
-    description: input.description || null,
-    image_url: input.image_url || "/images/food/shawarma.jpg",
-    display_order: input.display_order ?? (runtimeCategories.length + 1),
+    ...input,
+    id,
+    display_order: input.display_order || runtimeCategories.length + 1,
     is_published: input.is_published ?? true,
     is_archived: false,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    created_at: now,
+    updated_at: now,
   };
 
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await admin.from("categories").insert([newCat]).select().single();
-      if (!error && data) {
-        runtimeCategories.push(data as Category);
-        return data as Category;
+      const rows = await sql`
+        INSERT INTO categories (id, name, slug, description, image_url, display_order, is_published, is_archived, created_at, updated_at)
+        VALUES (
+          ${newCat.id}, ${newCat.name}, ${newCat.slug}, ${newCat.description || null},
+          ${newCat.image_url}, ${newCat.display_order}, ${newCat.is_published}, FALSE, ${now}, ${now}
+        )
+        RETURNING *;
+      `;
+      if (rows && rows.length > 0) {
+        runtimeCategories.push(rows[0] as Category);
+        return rows[0] as Category;
       }
-    } catch {
-      // DB insert failure fallback
+    } catch (e) {
+      console.warn("Neon createCategory failed, using memory:", e);
     }
   }
 
@@ -93,22 +100,29 @@ export async function createCategory(input: Partial<Category>): Promise<Category
 }
 
 export async function updateCategory(id: string, input: Partial<Category>): Promise<Category> {
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const now = new Date().toISOString();
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await admin
-        .from("categories")
-        .update({ ...input, updated_at: new Date().toISOString() })
-        .eq("id", id)
-        .select()
-        .single();
-      if (!error && data) {
+      const rows = await sql`
+        UPDATE categories SET
+          name = COALESCE(${input.name || null}, name),
+          slug = COALESCE(${input.slug || null}, slug),
+          description = COALESCE(${input.description !== undefined ? input.description : null}, description),
+          image_url = COALESCE(${input.image_url || null}, image_url),
+          display_order = COALESCE(${input.display_order || null}, display_order),
+          is_published = COALESCE(${input.is_published !== undefined ? input.is_published : null}, is_published),
+          updated_at = ${now}
+        WHERE id = ${id}
+        RETURNING *;
+      `;
+      if (rows && rows.length > 0) {
         const idx = runtimeCategories.findIndex((c) => c.id === id);
-        if (idx >= 0) runtimeCategories[idx] = data as Category;
-        return data as Category;
+        if (idx >= 0) runtimeCategories[idx] = rows[0] as Category;
+        return rows[0] as Category;
       }
-    } catch {
-      // DB update fallback
+    } catch (e) {
+      console.warn("Neon updateCategory failed, using memory:", e);
     }
   }
 
@@ -117,27 +131,26 @@ export async function updateCategory(id: string, input: Partial<Category>): Prom
   const updated = {
     ...runtimeCategories[idx],
     ...input,
-    updated_at: new Date().toISOString(),
+    updated_at: now,
   };
   runtimeCategories[idx] = updated;
   return updated;
 }
 
 export async function archiveCategory(id: string): Promise<boolean> {
-  // Prevent deletion if category contains non-archived products
   const hasProducts = runtimeProducts.some(
-    (p) => (p.category_id === id) && !p.is_archived
+    (p) => p.category_id === id && !p.is_archived
   );
   if (hasProducts) {
     throw new Error("Cannot archive category that contains active products. Please reassign or archive products first.");
   }
 
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      await admin.from("categories").update({ is_archived: true }).eq("id", id);
-    } catch {
-      // DB fallback
+      await sql`UPDATE categories SET is_archived = TRUE WHERE id = ${id};`;
+    } catch (e) {
+      console.warn("Neon archiveCategory failed:", e);
     }
   }
 
@@ -151,41 +164,65 @@ export async function archiveCategory(id: string): Promise<boolean> {
 
 /**
  * -------------------------------------------------------------
- * PRODUCT OPERATIONS
+ * PRODUCT OPERATIONS (NEON POSTGRESQL + CACHE)
  * -------------------------------------------------------------
  */
 export async function getProducts(filters?: ProductFilterParams): Promise<Product[]> {
-  const supabase = getSupabaseServerClient();
-  if (supabase) {
+  const sql = getDb();
+  if (sql) {
     try {
-      let query = supabase
-        .from("products")
-        .select(`
-          *,
-          category:categories(*),
-          images:product_images(*),
-          variants:product_variants(*),
-          addon_groups:product_addon_groups(
-            *,
-            addons:product_addons(*)
-          )
-        `)
-        .eq("is_archived", false);
+      const rows = await sql`
+        SELECT p.*,
+          json_build_object(
+            'id', c.id,
+            'name', c.name,
+            'slug', c.slug,
+            'image_url', c.image_url
+          ) as category,
+          COALESCE(
+            (SELECT json_agg(img) FROM product_images img WHERE img.product_id = p.id),
+            '[]'::json
+          ) as images,
+          COALESCE(
+            (SELECT json_agg(v) FROM product_variants v WHERE v.product_id = p.id),
+            '[]'::json
+          ) as variants,
+          COALESCE(
+            (
+              SELECT json_agg(
+                json_build_object(
+                  'id', ag.id,
+                  'product_id', ag.product_id,
+                  'name', ag.name,
+                  'description', ag.description,
+                  'min_selections', ag.min_selections,
+                  'max_selections', ag.max_selections,
+                  'is_required', ag.is_required,
+                  'display_order', ag.display_order,
+                  'addons', COALESCE((SELECT json_agg(ad) FROM product_addons ad WHERE ad.addon_group_id = ag.id), '[]'::json)
+                )
+              ) FROM product_addon_groups ag WHERE ag.product_id = p.id
+            ),
+            '[]'::json
+          ) as addon_groups
+        FROM products p
+        LEFT JOIN categories c ON p.category_id = c.id
+        WHERE p.is_archived = FALSE
+        ORDER BY p.display_order ASC;
+      `;
 
-      if (!filters?.includeUnpublished) {
-        query = query.eq("is_published", true);
-      }
-      if (filters?.isFeatured !== undefined) {
-        query = query.eq("is_featured", filters.isFeatured);
-      }
-      if (filters?.isAvailable !== undefined) {
-        query = query.eq("is_available", filters.isAvailable);
-      }
-
-      const { data, error } = await query;
-      if (!error && data && data.length > 0) {
-        let list = data as Product[];
-        if (filters?.categorySlug) {
+      if (rows && rows.length > 0) {
+        let list = rows as Product[];
+        if (!filters?.includeUnpublished) {
+          list = list.filter((p) => p.is_published);
+        }
+        if (filters?.isFeatured !== undefined) {
+          list = list.filter((p) => p.is_featured === filters.isFeatured);
+        }
+        if (filters?.isAvailable !== undefined) {
+          list = list.filter((p) => p.is_available === filters.isAvailable);
+        }
+        if (filters?.categorySlug && filters.categorySlug !== "all") {
           list = list.filter((p) => p.category?.slug === filters.categorySlug);
         }
         if (filters?.search) {
@@ -199,8 +236,8 @@ export async function getProducts(filters?: ProductFilterParams): Promise<Produc
         }
         return list;
       }
-    } catch {
-      // Supabase query error, fall through to runtime
+    } catch (e) {
+      console.warn("Neon getProducts failed, using fallback:", e);
     }
   }
 
@@ -248,80 +285,90 @@ export async function getProducts(filters?: ProductFilterParams): Promise<Produc
 export async function getProductBySlug(slug: string): Promise<Product | null> {
   const products = await getProducts({ includeUnpublished: true });
   const p = products.find((prod) => prod.slug === slug);
-  return p || null;
+  return p ? enrichProduct(p) : null;
 }
 
 export async function getProductById(id: string): Promise<Product | null> {
   const products = await getProducts({ includeUnpublished: true });
   const p = products.find((prod) => prod.id === id);
-  return p || null;
+  return p ? enrichProduct(p) : null;
 }
 
-export async function createProduct(input: Partial<Product>): Promise<Product> {
-  const newProd: Product = {
-    id: input.id || `prod-${Date.now()}`,
-    category_id: input.category_id || runtimeCategories[0].id,
-    name: input.name || "New Dish",
-    slug: input.slug || `dish-${Date.now()}`,
-    sku: input.sku || `EMP-${Date.now().toString().slice(-4)}`,
-    short_description: input.short_description || "Freshly prepared meal",
-    full_description: input.full_description || null,
-    base_price_kobo: input.base_price_kobo ?? 450000,
-    comparison_price_kobo: input.comparison_price_kobo ?? null,
-    currency: input.currency || "NGN",
-    is_initial_benchmark: input.is_initial_benchmark ?? true,
-    is_featured: input.is_featured ?? false,
-    is_available: input.is_available ?? true,
-    availability_status: input.availability_status || "Fresh to order",
-    min_prep_time_minutes: input.min_prep_time_minutes ?? 15,
-    max_prep_time_minutes: input.max_prep_time_minutes ?? 25,
+export async function createProduct(input: Omit<Product, "id" | "created_at" | "updated_at">): Promise<Product> {
+  const now = new Date().toISOString();
+  const id = `prod-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const newProduct: Product = {
+    ...input,
+    id,
+    currency: "NGN",
+    display_order: input.display_order || runtimeProducts.length + 1,
     is_published: input.is_published ?? true,
     is_archived: false,
-    display_order: input.display_order ?? (runtimeProducts.length + 1),
     ingredients: input.ingredients || [],
     allergens: input.allergens || [],
     dietary_labels: input.dietary_labels || [],
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    images: input.images || [],
-    variants: input.variants || [],
-    addon_groups: input.addon_groups || [],
+    created_at: now,
+    updated_at: now,
   };
 
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await admin.from("products").insert([newProd]).select().single();
-      if (!error && data) {
-        runtimeProducts.push(data as Product);
-        return enrichProduct(data as Product);
+      const rows = await sql`
+        INSERT INTO products (
+          id, category_id, name, slug, sku, short_description, full_description,
+          base_price_kobo, comparison_price_kobo, currency, is_featured, is_available,
+          availability_status, min_prep_time_minutes, max_prep_time_minutes, is_published,
+          is_archived, display_order, ingredients, allergens, dietary_labels, created_at, updated_at
+        ) VALUES (
+          ${newProduct.id}, ${newProduct.category_id}, ${newProduct.name}, ${newProduct.slug},
+          ${newProduct.sku || null}, ${newProduct.short_description}, ${newProduct.full_description || null},
+          ${newProduct.base_price_kobo}, ${newProduct.comparison_price_kobo || null}, 'NGN',
+          ${newProduct.is_featured}, ${newProduct.is_available}, ${newProduct.availability_status},
+          ${newProduct.min_prep_time_minutes}, ${newProduct.max_prep_time_minutes}, ${newProduct.is_published},
+          FALSE, ${newProduct.display_order}, ${JSON.stringify(newProduct.ingredients)}::jsonb,
+          ${JSON.stringify(newProduct.allergens)}::jsonb, ${JSON.stringify(newProduct.dietary_labels)}::jsonb,
+          ${now}, ${now}
+        )
+        RETURNING *;
+      `;
+      if (rows && rows.length > 0) {
+        runtimeProducts.push(rows[0] as Product);
+        return enrichProduct(rows[0] as Product);
       }
-    } catch {
-      // DB insert fallback
+    } catch (e) {
+      console.warn("Neon createProduct failed, using memory:", e);
     }
   }
 
-  runtimeProducts.push(newProd);
-  return enrichProduct(newProd);
+  runtimeProducts.push(newProduct);
+  return enrichProduct(newProduct);
 }
 
 export async function updateProduct(id: string, input: Partial<Product>): Promise<Product> {
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const now = new Date().toISOString();
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await admin
-        .from("products")
-        .update({ ...input, updated_at: new Date().toISOString() })
-        .eq("id", id)
-        .select()
-        .single();
-      if (!error && data) {
+      const rows = await sql`
+        UPDATE products SET
+          name = COALESCE(${input.name || null}, name),
+          short_description = COALESCE(${input.short_description || null}, short_description),
+          full_description = COALESCE(${input.full_description !== undefined ? input.full_description : null}, full_description),
+          base_price_kobo = COALESCE(${input.base_price_kobo || null}, base_price_kobo),
+          is_available = COALESCE(${input.is_available !== undefined ? input.is_available : null}, is_available),
+          is_published = COALESCE(${input.is_published !== undefined ? input.is_published : null}, is_published),
+          updated_at = ${now}
+        WHERE id = ${id}
+        RETURNING *;
+      `;
+      if (rows && rows.length > 0) {
         const idx = runtimeProducts.findIndex((p) => p.id === id);
-        if (idx >= 0) runtimeProducts[idx] = { ...runtimeProducts[idx], ...(data as Product) };
-        return enrichProduct(runtimeProducts[idx]);
+        if (idx >= 0) runtimeProducts[idx] = rows[0] as Product;
+        return enrichProduct(rows[0] as Product);
       }
-    } catch {
-      // DB update fallback
+    } catch (e) {
+      console.warn("Neon updateProduct failed, using memory:", e);
     }
   }
 
@@ -330,19 +377,19 @@ export async function updateProduct(id: string, input: Partial<Product>): Promis
   const updated = {
     ...runtimeProducts[idx],
     ...input,
-    updated_at: new Date().toISOString(),
+    updated_at: now,
   };
   runtimeProducts[idx] = updated;
   return enrichProduct(updated);
 }
 
 export async function archiveProduct(id: string): Promise<boolean> {
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      await admin.from("products").update({ is_archived: true }).eq("id", id);
-    } catch {
-      // DB fallback
+      await sql`UPDATE products SET is_archived = TRUE WHERE id = ${id};`;
+    } catch (e) {
+      console.warn("Neon archiveProduct failed:", e);
     }
   }
 
@@ -354,32 +401,16 @@ export async function archiveProduct(id: string): Promise<boolean> {
   return false;
 }
 
-/**
- * -------------------------------------------------------------
- * VARIATIONS & ADD-ONS & IMAGES OPERATIONS
- * -------------------------------------------------------------
- */
-export async function addProductVariant(productId: string, variant: Partial<ProductVariant>): Promise<ProductVariant> {
-  const newVariant: ProductVariant = {
-    id: variant.id || `var-${Date.now()}`,
-    product_id: productId,
-    name: variant.name || "Standard",
-    sku: variant.sku || null,
-    price_adjustment_kobo: variant.price_adjustment_kobo ?? 0,
-    explicit_price_kobo: variant.explicit_price_kobo ?? null,
-    is_available: variant.is_available ?? true,
-    display_order: variant.display_order ?? 1,
-    created_at: new Date().toISOString(),
-  };
-
-  const p = runtimeProducts.find((prod) => prod.id === productId);
-  if (p) {
-    p.variants = [...(p.variants || []), newVariant];
-  }
-  return newVariant;
-}
-
 export async function deleteProductVariant(variantId: string): Promise<boolean> {
+  const sql = getDb();
+  if (sql) {
+    try {
+      await sql`DELETE FROM product_variants WHERE id = ${variantId};`;
+    } catch (e) {
+      console.warn("Neon deleteProductVariant failed:", e);
+    }
+  }
+
   for (const p of runtimeProducts) {
     if (p.variants) {
       p.variants = p.variants.filter((v) => v.id !== variantId);
@@ -449,36 +480,51 @@ export async function addProductImage(productId: string, img: Partial<ProductIma
   return newImg;
 }
 
-/**
- * Sync / Seed utility:
- * If connected to Supabase, checks if tables are empty and seeds them.
- */
-export async function seedSupabaseCatalogue(): Promise<{ seeded: boolean; message: string }> {
-  const admin = getSupabaseAdminClient();
-  if (!admin) {
+export async function seedCatalogue(): Promise<{ seeded: boolean; message: string }> {
+  const sql = getDb();
+  if (!sql) {
     return {
       seeded: false,
-      message: "Supabase credentials not configured in environment. Using robust runtime store.",
+      message: "Database connection not configured in environment. Using robust runtime store.",
     };
   }
 
   try {
-    const { count } = await admin.from("categories").select("*", { count: "exact", head: true });
-    if (count && count > 0) {
-      return { seeded: false, message: `Database already contains ${count} categories. Skipping seed.` };
+    const countRes = await sql`SELECT count(*)::int as cnt FROM categories;`;
+    if (countRes && countRes[0].cnt > 0) {
+      return { seeded: false, message: `Database already contains ${countRes[0].cnt} categories. Skipping seed.` };
     }
 
-    // Insert categories
-    const catRows = SEED_CATEGORIES.map(({ item_count, ...c }) => c);
-    const { error: catErr } = await admin.from("categories").insert(catRows);
-    if (catErr) throw catErr;
+    for (const cat of SEED_CATEGORIES) {
+      await sql`
+        INSERT INTO categories (id, name, slug, description, image_url, display_order, is_published, is_archived)
+        VALUES (${cat.id}, ${cat.name}, ${cat.slug}, ${cat.description || null}, ${cat.image_url}, ${cat.display_order}, TRUE, FALSE)
+        ON CONFLICT (id) DO NOTHING;
+      `;
+    }
 
-    // Insert products
-    const prodRows = SEED_PRODUCTS.map(({ images, variants, addon_groups, category, ...p }) => p);
-    const { error: prodErr } = await admin.from("products").insert(prodRows);
-    if (prodErr) throw prodErr;
+    for (const p of SEED_PRODUCTS) {
+      await sql`
+        INSERT INTO products (
+          id, category_id, name, slug, sku, short_description, full_description,
+          base_price_kobo, comparison_price_kobo, currency, is_featured, is_available,
+          availability_status, min_prep_time_minutes, max_prep_time_minutes, is_published,
+          is_archived, display_order, ingredients, allergens, dietary_labels
+        ) VALUES (
+          ${p.id}, ${p.category_id}, ${p.name}, ${p.slug}, ${p.sku || null},
+          ${p.short_description}, ${p.full_description || null}, ${p.base_price_kobo},
+          ${p.comparison_price_kobo || null}, 'NGN', ${p.is_featured}, ${p.is_available},
+          ${p.availability_status}, ${p.min_prep_time_minutes}, ${p.max_prep_time_minutes},
+          ${p.is_published}, FALSE, ${p.display_order}, ${JSON.stringify(p.ingredients)}::jsonb,
+          ${JSON.stringify(p.allergens)}::jsonb, ${JSON.stringify(p.dietary_labels)}::jsonb
+        ) ON CONFLICT (id) DO NOTHING;
+      `;
+    }
 
-    return { seeded: true, message: `Successfully seeded ${SEED_CATEGORIES.length} categories and ${SEED_PRODUCTS.length} products to Supabase!` };
+    return {
+      seeded: true,
+      message: `Successfully seeded ${SEED_CATEGORIES.length} categories and ${SEED_PRODUCTS.length} products to Neon PostgreSQL!`,
+    };
   } catch (err: any) {
     return { seeded: false, message: `Seed error: ${err.message}` };
   }

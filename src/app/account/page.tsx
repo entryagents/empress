@@ -1,6 +1,9 @@
 import { getCurrentCustomer } from "@/lib/customer/service";
 import { ProfileForm } from "./profile-form";
 
+export const instant = false;
+
+
 export const metadata = {
   title: "Profile Details | Empress Delicacies",
 };

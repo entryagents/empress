@@ -7,6 +7,9 @@ import { Reviews } from "@/components/sections/reviews";
 import { DeliveryPickup } from "@/components/sections/delivery-pickup";
 import { CallToAction } from "@/components/sections/cta";
 
+export const instant = false;
+
+
 export default function Home() {
   return (
     <>

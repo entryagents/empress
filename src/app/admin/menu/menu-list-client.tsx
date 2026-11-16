@@ -112,7 +112,7 @@ export function AdminMenuListClient({ initialProducts, categories }: Props) {
             onClick={handleSeedDatabase}
             disabled={isSeeding}
             className="inline-flex items-center gap-1.5 rounded border border-wine-900/20 bg-white px-3 py-2 text-xs font-semibold text-wine-900 hover:bg-ivory-100 transition-colors shadow-2xs"
-            title="Seed baseline database rows if Supabase tables are empty"
+            title="Seed baseline database rows if database tables are empty"
           >
             <Database className="size-3.5 text-champagne-600" />
             {isSeeding ? "Syncing..." : "Sync DB"}

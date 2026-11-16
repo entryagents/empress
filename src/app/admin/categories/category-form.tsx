@@ -145,7 +145,7 @@ export function CategoryForm({ initialData }: Props) {
               className="mt-1.5 w-full rounded border border-wine-900/20 bg-ivory-50/50 px-3.5 py-2 text-sm text-wine-950 focus:border-champagne-500 focus:outline-none"
             />
             <p className="mt-1 text-[0.7rem] text-wine-700/80">
-              Standard food photo path or authenticated Supabase bucket image URL.
+              Standard food photo path or Empress Media Vault image URL.
             </p>
           </div>
 

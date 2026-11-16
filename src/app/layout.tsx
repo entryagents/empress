@@ -3,8 +3,11 @@ import { Fraunces, Manrope } from "next/font/google";
 import { site } from "@/config/site";
 import { Providers } from "@/components/providers";
 import { Navbar } from "@/components/layout/navbar";
-import { Footer } from "@/components/layout/footer";
+import { ConditionalFooter } from "@/components/layout/conditional-footer";
 import "./globals.css";
+
+export const instant = false;
+
 
 const fraunces = Fraunces({
   variable: "--font-fraunces",
@@ -47,7 +50,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <main id="main" className="flex-1">
             {children}
           </main>
-          <Footer />
+          <ConditionalFooter />
         </Providers>
       </body>
     </html>

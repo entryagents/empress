@@ -3,6 +3,9 @@ import { connection } from "next/server";
 import { generateAnalyticsReport } from "@/lib/analytics/service";
 import { AnalyticsClient } from "./analytics-client";
 
+export const instant = false;
+
+
 export const metadata = {
   title: "Analytics & Executive Reporting | Empress Delicacies",
   description: "Audited financial ledger, dish popularity, customer insights, and fleet logistics in Africa/Lagos WAT",

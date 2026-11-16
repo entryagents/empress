@@ -1,6 +1,9 @@
 import { getProducts, getCategories } from "@/lib/catalogue/service";
 import { AdminMenuListClient } from "./menu-list-client";
 
+export const instant = false;
+
+
 export const metadata = {
   title: "Dish Catalogue | Empress Admin",
 };

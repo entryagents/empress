@@ -1,5 +1,8 @@
 import { CategoryForm } from "../category-form";
 
+export const instant = false;
+
+
 export const metadata = {
   title: "New Category | Empress Admin",
 };

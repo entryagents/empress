@@ -50,13 +50,9 @@ export async function submitCheckoutOrderAction(
   checkoutInput: CustomerCheckoutInput
 ) {
   try {
-    const { createSupabaseServerClient } = await import("@/lib/supabase/server");
-    const supabase = await createSupabaseServerClient();
-    let userId: string | null = null;
-    if (supabase) {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) userId = user.id;
-    }
+    const { getSessionUser } = await import("@/lib/auth/session");
+    const user = await getSessionUser();
+    const userId: string | null = user ? user.id : null;
 
     const res = await createOrder(cartItems, checkoutInput, userId);
     if (res.success && res.order) {

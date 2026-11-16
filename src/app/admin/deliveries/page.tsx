@@ -4,6 +4,9 @@ import { getAllDeliveryPersonnel, getActiveDeliveriesAdmin } from "@/lib/deliver
 import { getAdminOrders } from "@/lib/order/service";
 import { AdminDeliveriesClient } from "./deliveries-client";
 
+export const instant = false;
+
+
 export const metadata = {
   title: "Delivery Management & Live Fleet Radar | Empress Delicacies",
   description: "Dispatch control, driver fleet management, and live GPS delivery tracking",

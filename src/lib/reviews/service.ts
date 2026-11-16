@@ -6,8 +6,7 @@ import type {
   ReviewSubmissionInput,
   PublicReviewSummary,
 } from "@/types/reviews";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db";
 import { getOrderByReferenceAndToken } from "@/lib/order/service";
 
 // In-memory runtime persistence for sandbox/testing/failover
@@ -102,19 +101,27 @@ export async function submitCustomerReview(
     updated_at: now,
   };
 
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await admin
-        .from("customer_reviews")
-        .insert([newReview])
-        .select()
-        .single();
-      if (!error && data) {
-        return { success: true, review: data as CustomerReview };
+      const rows = await sql`
+        INSERT INTO customer_reviews (
+          id, order_id, order_reference, product_id, product_name, user_id,
+          customer_name, rating, review_text, image_urls, status, created_at, updated_at
+        ) VALUES (
+          ${newReview.id}, ${newReview.order_id}, ${newReview.order_reference},
+          ${newReview.product_id || null}, ${newReview.product_name || null},
+          ${newReview.user_id || null}, ${newReview.customer_name}, ${newReview.rating},
+          ${newReview.review_text}, ${JSON.stringify(newReview.image_urls || [])}::jsonb,
+          'pending', ${now}, ${now}
+        )
+        RETURNING *;
+      `;
+      if (rows && rows.length > 0) {
+        return { success: true, review: rows[0] as CustomerReview };
       }
-    } catch {
-      // Fallback
+    } catch (e) {
+      console.warn("Neon review insertion notice, maintaining memory cache:", e);
     }
   }
 
@@ -153,18 +160,17 @@ export async function editCustomerReview(params: {
   review.status = "pending"; // Re-moderate on edit
   review.updated_at = new Date().toISOString();
 
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      await admin
-        .from("customer_reviews")
-        .update({
-          rating: review.rating,
-          review_text: review.review_text,
-          status: "pending",
-          updated_at: review.updated_at,
-        })
-        .eq("id", params.reviewId);
+      await sql`
+        UPDATE customer_reviews
+        SET rating = ${review.rating},
+            review_text = ${review.review_text},
+            status = 'pending',
+            updated_at = ${review.updated_at}
+        WHERE id = ${params.reviewId};
+      `;
     } catch {
       // Fallback
     }
@@ -189,10 +195,13 @@ export async function deleteCustomerReview(params: {
 
   runtimeReviews = runtimeReviews.filter((r) => r.id !== params.reviewId);
 
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      await admin.from("customer_reviews").delete().eq("id", params.reviewId);
+      await sql`
+        DELETE FROM customer_reviews
+        WHERE id = ${params.reviewId};
+      `;
     } catch {
       // Fallback
     }
@@ -210,24 +219,25 @@ export async function getAdminReviews(options?: {
   status?: ReviewStatus;
   limit?: number;
 }): Promise<CustomerReview[]> {
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      let query = admin
-        .from("customer_reviews")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const limitVal = options?.limit || 50;
+      const rows = options?.status
+        ? await sql`
+            SELECT * FROM customer_reviews
+            WHERE status = ${options.status}
+            ORDER BY created_at DESC
+            LIMIT ${limitVal};
+          `
+        : await sql`
+            SELECT * FROM customer_reviews
+            ORDER BY created_at DESC
+            LIMIT ${limitVal};
+          `;
 
-      if (options?.status) {
-        query = query.eq("status", options.status);
-      }
-      if (options?.limit) {
-        query = query.limit(options.limit);
-      }
-
-      const { data, error } = await query;
-      if (!error && data && data.length > 0) {
-        return data as CustomerReview[];
+      if (rows && rows.length > 0) {
+        return rows as CustomerReview[];
       }
     } catch {
       // Fallback
@@ -246,35 +256,32 @@ export async function moderateReview(params: {
 }): Promise<{ success: boolean; error?: string }> {
   const now = new Date().toISOString();
   const review = runtimeReviews.find((r) => r.id === params.reviewId);
-  if (!review) {
-    return { success: false, error: "Review not found." };
+  if (review) {
+    review.status = params.status;
+    review.moderated_by = params.moderatorUserId || null;
+    review.moderated_at = now;
+    if (params.rejectionReason) review.rejection_reason = params.rejectionReason;
+    if (params.adminResponse) {
+      review.admin_response = params.adminResponse;
+      review.admin_responded_at = now;
+    }
+    review.updated_at = now;
   }
 
-  review.status = params.status;
-  review.moderated_by = params.moderatorUserId || null;
-  review.moderated_at = now;
-  if (params.rejectionReason) review.rejection_reason = params.rejectionReason;
-  if (params.adminResponse) {
-    review.admin_response = params.adminResponse;
-    review.admin_responded_at = now;
-  }
-  review.updated_at = now;
-
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      await admin
-        .from("customer_reviews")
-        .update({
-          status: params.status,
-          moderated_by: review.moderated_by,
-          moderated_at: now,
-          rejection_reason: review.rejection_reason || null,
-          admin_response: review.admin_response || null,
-          admin_responded_at: review.admin_responded_at || null,
-          updated_at: now,
-        })
-        .eq("id", params.reviewId);
+      await sql`
+        UPDATE customer_reviews
+        SET status = ${params.status},
+            moderated_by = ${params.moderatorUserId || null},
+            moderated_at = ${now},
+            rejection_reason = ${params.rejectionReason || null},
+            admin_response = ${params.adminResponse || null},
+            admin_responded_at = ${params.adminResponse ? now : null},
+            updated_at = ${now}
+        WHERE id = ${params.reviewId};
+      `;
     } catch {
       // Fallback
     }
@@ -289,27 +296,28 @@ export async function moderateReview(params: {
  * ----------------------------------------------------------------------------
  */
 export async function getPublicReviews(productId?: string): Promise<PublicReviewSummary> {
-  const supabase = getSupabaseServerClient();
+  const sql = getDb();
   let approved: CustomerReview[] = [];
 
-  if (supabase) {
+  if (sql) {
     try {
-      let query = supabase
-        .from("customer_reviews")
-        .select("*")
-        .eq("status", "approved")
-        .order("created_at", { ascending: false });
+      const rows = productId
+        ? await sql`
+            SELECT * FROM customer_reviews
+            WHERE status = 'approved' AND product_id = ${productId}
+            ORDER BY created_at DESC;
+          `
+        : await sql`
+            SELECT * FROM customer_reviews
+            WHERE status = 'approved'
+            ORDER BY created_at DESC;
+          `;
 
-      if (productId) {
-        query = query.eq("product_id", productId);
+      if (rows && rows.length > 0) {
+        approved = rows as CustomerReview[];
       }
-
-      const { data, error } = await query;
-      if (!error && data) {
-        approved = data as CustomerReview[];
-      }
-    } catch {
-      // Fallback
+    } catch (e) {
+      console.warn("Neon getPublicReviews notice, using memory:", e);
     }
   }
 
@@ -381,19 +389,26 @@ export async function submitCustomerFeedback(input: {
     updated_at: now,
   };
 
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await admin
-        .from("customer_feedback")
-        .insert([feedback])
-        .select()
-        .single();
-      if (!error && data) {
-        return { success: true, feedback: data as CustomerFeedback };
+      const rows = await sql`
+        INSERT INTO customer_feedback (
+          id, customer_name, customer_email, customer_phone, order_reference,
+          category, rating, comments, is_resolved, created_at, updated_at
+        ) VALUES (
+          ${feedback.id}, ${feedback.customer_name}, ${feedback.customer_email},
+          ${feedback.customer_phone || null}, ${feedback.order_reference || null},
+          ${feedback.category}, ${feedback.rating}, ${feedback.comments},
+          FALSE, ${now}, ${now}
+        )
+        RETURNING *;
+      `;
+      if (rows && rows.length > 0) {
+        return { success: true, feedback: rows[0] as CustomerFeedback };
       }
-    } catch {
-      // Fallback
+    } catch (e) {
+      console.warn("Neon customer_feedback notice, using memory:", e);
     }
   }
 
@@ -404,24 +419,25 @@ export async function submitCustomerFeedback(input: {
 export async function getAdminCustomerFeedback(options?: {
   isResolved?: boolean;
 }): Promise<CustomerFeedback[]> {
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      let query = admin
-        .from("customer_feedback")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const rows = typeof options?.isResolved === "boolean"
+        ? await sql`
+            SELECT * FROM customer_feedback
+            WHERE is_resolved = ${options.isResolved}
+            ORDER BY created_at DESC;
+          `
+        : await sql`
+            SELECT * FROM customer_feedback
+            ORDER BY created_at DESC;
+          `;
 
-      if (typeof options?.isResolved === "boolean") {
-        query = query.eq("is_resolved", options.isResolved);
+      if (rows && rows.length > 0) {
+        return rows as CustomerFeedback[];
       }
-
-      const { data, error } = await query;
-      if (!error && data && data.length > 0) {
-        return data as CustomerFeedback[];
-      }
-    } catch {
-      // Fallback
+    } catch (e) {
+      console.warn("Neon getAdminCustomerFeedback notice, using memory:", e);
     }
   }
 

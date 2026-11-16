@@ -3,11 +3,14 @@ import { User, MapPin, ShoppingBag, LogOut, ExternalLink, ChefHat } from "lucide
 import { getCurrentCustomer } from "@/lib/customer/service";
 import { customerSignOutAction } from "../auth/actions";
 import { redirect } from "next/navigation";
+import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 
 export const metadata = {
   title: "My Account | Empress Delicacies",
   description: "Manage your personal details, saved Lagos delivery addresses, and dining order history.",
 };
+
+export const instant = false;
 
 export default async function AccountLayout({
   children,
@@ -22,8 +25,8 @@ export default async function AccountLayout({
   }
 
   return (
-    <section className="min-h-[90vh] bg-ivory-100/60 pb-28 pt-36 text-wine-950 font-sans">
-      <div className="container-x max-w-5xl">
+    <AuthenticatedShell role="customer">
+      <div className="max-w-4xl">
         {/* Customer Header Banner */}
         <div className="rounded-[2px] border border-wine-900/10 bg-white p-6 shadow-soft sm:p-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-wine-900/10 pb-6">
@@ -100,6 +103,6 @@ export default async function AccountLayout({
         {/* Tab Content Area */}
         <div className="mt-8">{children}</div>
       </div>
-    </section>
+    </AuthenticatedShell>
   );
 }

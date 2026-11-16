@@ -4,6 +4,9 @@ import { getOrderByReferenceAndToken, getOrderStatusHistory, getAdminOrders } fr
 import { getOrderNotificationLogs } from "@/lib/order/notifications";
 import { OrderDetailClient } from "./order-detail-client";
 
+export const instant = false;
+
+
 interface Props {
   params: Promise<{
     id: string; // Order reference or ID passed as route param
@@ -17,13 +20,7 @@ export async function generateMetadata({ params }: Props) {
   };
 }
 
-export async function generateStaticParams() {
-  const orders = await getAdminOrders(10);
-  if (!orders || orders.length === 0) {
-    return [{ id: "EMP-SAMPLE" }];
-  }
-  return orders.map((o) => ({ id: o.order_reference }));
-}
+
 
 async function OrderDetailDataLoader({ paramsPromise }: { paramsPromise: Promise<{ id: string }> }) {
   const { id } = await paramsPromise;

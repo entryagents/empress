@@ -2,14 +2,14 @@ import { notFound } from "next/navigation";
 import { getCategories } from "@/lib/catalogue/service";
 import { CategoryForm } from "../category-form";
 
+export const instant = false;
+
+
 export const metadata = {
   title: "Edit Category | Empress Admin",
 };
 
-export async function generateStaticParams() {
-  const categories = await getCategories(true);
-  return categories.map((c) => ({ id: c.id }));
-}
+
 
 export default async function EditCategoryPage({
   params,

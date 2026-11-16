@@ -8,7 +8,7 @@ import type {
   PublicDeliveryTrackingInfo,
 } from "@/types/delivery";
 import type { Order } from "@/types/order";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { getDb } from "@/lib/db";
 import { getOrderByReferenceAndToken, updateAdminOrderStatus } from "@/lib/order/service";
 
 // In-memory runtime persistence for testing & serverless failover
@@ -105,33 +105,30 @@ function broadcastLocalLocation(update: DeliveryLocationUpdate) {
  */
 
 export async function getAllDeliveryPersonnel(): Promise<DeliveryPersonnel[]> {
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await admin
-        .from("delivery_personnel")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (!error && data && data.length > 0) {
-        return data as DeliveryPersonnel[];
+      const rows = await sql`
+        SELECT * FROM delivery_personnel ORDER BY created_at DESC;
+      `;
+      if (rows && rows.length > 0) {
+        return rows as DeliveryPersonnel[];
       }
-    } catch {
-      // Fallback
+    } catch (e) {
+      console.warn("Neon getAllDeliveryPersonnel failed, using memory:", e);
     }
   }
   return [...runtimePersonnel];
 }
 
 export async function getDeliveryPersonById(driverId: string): Promise<DeliveryPersonnel | null> {
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await admin
-        .from("delivery_personnel")
-        .select("*")
-        .eq("id", driverId)
-        .single();
-      if (!error && data) return data as DeliveryPersonnel;
+      const rows = await sql`
+        SELECT * FROM delivery_personnel WHERE id = ${driverId} LIMIT 1;
+      `;
+      if (rows && rows.length > 0) return rows[0] as DeliveryPersonnel;
     } catch {
       // Fallback
     }
@@ -140,20 +137,17 @@ export async function getDeliveryPersonById(driverId: string): Promise<DeliveryP
 }
 
 export async function getDeliveryPersonByUserId(userId: string): Promise<DeliveryPersonnel | null> {
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await admin
-        .from("delivery_personnel")
-        .select("*")
-        .eq("user_id", userId)
-        .single();
-      if (!error && data) return data as DeliveryPersonnel;
+      const rows = await sql`
+        SELECT * FROM delivery_personnel WHERE id = ${userId} OR email = (SELECT email FROM "user" WHERE id = ${userId}) LIMIT 1;
+      `;
+      if (rows && rows.length > 0) return rows[0] as DeliveryPersonnel;
     } catch {
       // Fallback
     }
   }
-  // Check runtime match by id or email
   return runtimePersonnel.find((p) => p.id === userId) || null;
 }
 
@@ -181,17 +175,23 @@ export async function createDeliveryPerson(input: {
     updated_at: now,
   };
 
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await admin
-        .from("delivery_personnel")
-        .insert([newDriver])
-        .select()
-        .single();
-      if (!error && data) return data as DeliveryPersonnel;
-    } catch {
-      // Fallback
+      const rows = await sql`
+        INSERT INTO delivery_personnel (
+          id, full_name, email, phone, vehicle_type, vehicle_plate_number,
+          status, is_active, created_at, updated_at
+        ) VALUES (
+          ${newDriver.id}, ${newDriver.full_name}, ${newDriver.email}, ${newDriver.phone},
+          ${newDriver.vehicle_type}, ${newDriver.vehicle_plate_number}, 'available', TRUE,
+          ${now}, ${now}
+        )
+        RETURNING *;
+      `;
+      if (rows && rows.length > 0) return rows[0] as DeliveryPersonnel;
+    } catch (e) {
+      console.warn("Neon createDeliveryPerson failed, using memory:", e);
     }
   }
 
@@ -205,7 +205,6 @@ export async function updateDeliveryPersonStatus(
   isActive?: boolean
 ): Promise<DeliveryPersonnel | null> {
   const now = new Date().toISOString();
-  const admin = getSupabaseAdminClient();
 
   const updates: Record<string, unknown> = {
     status,
@@ -215,15 +214,18 @@ export async function updateDeliveryPersonStatus(
     updates.is_active = isActive;
   }
 
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await admin
-        .from("delivery_personnel")
-        .update(updates)
-        .eq("id", driverId)
-        .select()
-        .single();
-      if (!error && data) return data as DeliveryPersonnel;
+      const rows = await sql`
+        UPDATE delivery_personnel SET
+          status = ${status},
+          is_active = COALESCE(${isActive !== undefined ? isActive : null}, is_active),
+          updated_at = ${now}
+        WHERE id = ${driverId}
+        RETURNING *;
+      `;
+      if (rows && rows.length > 0) return rows[0] as DeliveryPersonnel;
     } catch {
       // Fallback
     }
@@ -293,21 +295,26 @@ export async function assignOrderToDriver(params: {
     driver,
   };
 
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      // Insert assignment
-      await admin.from("delivery_assignments").insert([assignment]);
-      // Update order
-      await admin
-        .from("orders")
-        .update({
-          assigned_driver_id: driver.id,
-          delivery_assigned_at: now,
-        })
-        .eq("id", order.id);
-    } catch {
-      // Fallback
+      await sql`
+        INSERT INTO delivery_assignments (
+          id, order_id, order_reference, driver_id, status, assigned_by, assigned_at, notes, created_at, updated_at
+        ) VALUES (
+          ${assignment.id}, ${assignment.order_id}, ${assignment.order_reference},
+          ${assignment.driver_id}, ${assignment.status}, ${assignment.assigned_by || null},
+          ${now}, ${assignment.notes || null}, ${now}, ${now}
+        );
+      `;
+      await sql`
+        UPDATE orders SET
+          assigned_driver_id = ${driver.id},
+          delivery_assigned_at = ${now}
+        WHERE id = ${order.id};
+      `;
+    } catch (e) {
+      console.warn("Neon delivery assignment notice, using memory:", e);
     }
   }
 
@@ -339,25 +346,32 @@ export async function getAssignmentsForDriver(
   driverId: string,
   options?: { activeOnly?: boolean }
 ): Promise<(DeliveryAssignment & { order?: Order })[]> {
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      let query = admin
-        .from("delivery_assignments")
-        .select("*, order:orders(*)")
-        .eq("driver_id", driverId)
-        .order("assigned_at", { ascending: false });
-
-      if (options?.activeOnly) {
-        query = query.in("status", ["assigned", "accepted", "picked_up", "in_transit"]);
+      const rows = options?.activeOnly
+        ? await sql`
+            SELECT da.*,
+              to_json(o.*) as order
+            FROM delivery_assignments da
+            LEFT JOIN orders o ON da.order_id = o.id
+            WHERE da.driver_id = ${driverId}
+              AND da.status IN ('assigned', 'accepted', 'picked_up', 'in_transit')
+            ORDER BY da.assigned_at DESC;
+          `
+        : await sql`
+            SELECT da.*,
+              to_json(o.*) as order
+            FROM delivery_assignments da
+            LEFT JOIN orders o ON da.order_id = o.id
+            WHERE da.driver_id = ${driverId}
+            ORDER BY da.assigned_at DESC;
+          `;
+      if (rows && rows.length > 0) {
+        return rows as (DeliveryAssignment & { order?: Order })[];
       }
-
-      const { data, error } = await query;
-      if (!error && data && data.length > 0) {
-        return data as (DeliveryAssignment & { order?: Order })[];
-      }
-    } catch {
-      // Fallback
+    } catch (e) {
+      console.warn("Neon getAssignmentsForDriver notice, using memory:", e);
     }
   }
 
@@ -463,13 +477,14 @@ export async function acceptDeliveryAssignment(params: {
   assignment.accepted_at = now;
   assignment.updated_at = now;
 
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      await admin
-        .from("delivery_assignments")
-        .update({ status: "accepted", accepted_at: now, updated_at: now })
-        .eq("id", params.assignmentId);
+      await sql`
+        UPDATE delivery_assignments
+        SET status = 'accepted', accepted_at = ${now}, updated_at = ${now}
+        WHERE id = ${params.assignmentId};
+      `;
     } catch {
       // Fallback
     }
@@ -505,24 +520,22 @@ export async function rejectDeliveryAssignment(params: {
     order.assigned_driver = null;
   }
 
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      await admin
-        .from("delivery_assignments")
-        .update({
-          status: "rejected",
-          rejected_at: now,
-          rejection_reason: params.reason.trim(),
-          updated_at: now,
-        })
-        .eq("id", params.assignmentId);
+      await sql`
+        UPDATE delivery_assignments SET
+          status = 'rejected',
+          rejected_at = ${now},
+          rejection_reason = ${params.reason.trim()},
+          updated_at = ${now}
+        WHERE id = ${params.assignmentId};
+      `;
 
       if (order) {
-        await admin
-          .from("orders")
-          .update({ assigned_driver_id: null })
-          .eq("id", order.id);
+        await sql`
+          UPDATE orders SET assigned_driver_id = NULL WHERE id = ${order.id};
+        `;
       }
     } catch {
       // Fallback
@@ -555,17 +568,16 @@ export async function startDeliveryTrip(params: {
     notes: "Driver picked up food packages and initiated transit.",
   });
 
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      await admin
-        .from("delivery_assignments")
-        .update({
-          status: "in_transit",
-          picked_up_at: now,
-          updated_at: now,
-        })
-        .eq("id", params.assignmentId);
+      await sql`
+        UPDATE delivery_assignments SET
+          status = 'in_transit',
+          picked_up_at = ${now},
+          updated_at = ${now}
+        WHERE id = ${params.assignmentId};
+      `;
     } catch {
       // Fallback
     }
@@ -602,18 +614,17 @@ export async function completeDeliveryTrip(params: {
     notes: params.notes || "Driver safely handed packages to customer at destination.",
   });
 
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      await admin
-        .from("delivery_assignments")
-        .update({
-          status: "delivered",
-          delivered_at: now,
-          notes: params.notes || null,
-          updated_at: now,
-        })
-        .eq("id", params.assignmentId);
+      await sql`
+        UPDATE delivery_assignments SET
+          status = 'delivered',
+          delivered_at = ${now},
+          notes = ${params.notes || null},
+          updated_at = ${now}
+        WHERE id = ${params.assignmentId};
+      `;
     } catch {
       // Fallback
     }
@@ -645,18 +656,17 @@ export async function reportDeliveryProblem(params: {
   assignment.failure_reason = params.reason.trim();
   assignment.updated_at = now;
 
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      await admin
-        .from("delivery_assignments")
-        .update({
-          status: "failed",
-          failed_at: now,
-          failure_reason: params.reason.trim(),
-          updated_at: now,
-        })
-        .eq("id", params.assignmentId);
+      await sql`
+        UPDATE delivery_assignments SET
+          status = 'failed',
+          failed_at = ${now},
+          failure_reason = ${params.reason.trim()},
+          updated_at = ${now}
+        WHERE id = ${params.assignmentId};
+      `;
     } catch {
       // Fallback
     }
@@ -727,22 +737,30 @@ export async function ingestDeliveryLocationUpdate(params: {
     created_at: now,
   };
 
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      await admin.from("delivery_location_updates").insert([update]);
-      // Update driver current position snapshot
-      await admin
-        .from("delivery_personnel")
-        .update({
-          current_latitude: params.latitude,
-          current_longitude: params.longitude,
-          last_location_updated_at: now,
-          updated_at: now,
-        })
-        .eq("id", params.driverId);
-    } catch {
-      // Fallback
+      await sql`
+        INSERT INTO delivery_location_updates (
+          id, order_id, order_reference, driver_id, latitude, longitude,
+          heading, speed_mps, accuracy_meters, is_simulated, recorded_at, created_at
+        ) VALUES (
+          ${update.id}, ${update.order_id}, ${update.order_reference}, ${update.driver_id},
+          ${update.latitude}, ${update.longitude}, ${update.heading || null},
+          ${update.speed_mps || null}, ${update.accuracy_meters || null},
+          ${update.is_simulated || false}, ${now}, ${now}
+        );
+      `;
+      await sql`
+        UPDATE delivery_personnel SET
+          current_latitude = ${params.latitude},
+          current_longitude = ${params.longitude},
+          last_location_updated_at = ${now},
+          updated_at = ${now}
+        WHERE id = ${params.driverId};
+      `;
+    } catch (e) {
+      console.warn("Neon driver location update notice, using memory:", e);
     }
   }
 

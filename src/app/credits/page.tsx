@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { images } from "@/config/images";
 
+export const instant = false;
+
+
 export const metadata: Metadata = {
   title: "Image Credits & Photography Registry",
   description: "Attribution and licensing for authentic food photography displayed on Empress Delicacies.",

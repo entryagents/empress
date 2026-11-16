@@ -29,13 +29,23 @@ import type { Order } from "@/types/order";
 import { formatKobo } from "@/types/catalogue";
 import { ROUTES } from "@/config/site";
 
-export function OrderConfirmationClient() {
-  const searchParams = useSearchParams();
-  const refFromQuery = searchParams.get("ref") || "";
-  const tokenFromQuery = searchParams.get("token") || "";
+interface OrderConfirmationClientProps {
+  initialOrder?: Order | null;
+  initialRef?: string;
+  initialToken?: string;
+}
 
-  const [order, setOrder] = useState<Order | null>(null);
-  const [loading, setLoading] = useState(true);
+export function OrderConfirmationClient({
+  initialOrder = null,
+  initialRef = "",
+  initialToken = "",
+}: OrderConfirmationClientProps) {
+  const searchParams = useSearchParams();
+  const refFromQuery = initialRef || searchParams?.get("ref") || "";
+  const tokenFromQuery = initialToken || searchParams?.get("token") || "";
+
+  const [order, setOrder] = useState<Order | null>(initialOrder);
+  const [loading, setLoading] = useState(!initialOrder && Boolean(refFromQuery));
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isCheckingPayment, setIsCheckingPayment] = useState(false);
   const [isRetryingPayment, setIsRetryingPayment] = useState(false);
@@ -61,13 +71,20 @@ export function OrderConfirmationClient() {
   };
 
   useEffect(() => {
+    // Only fetch on client if mounted in browser and no order was provided by server
+    if (order) return;
+    if (typeof window === "undefined") return;
     if (!refFromQuery) {
       setLoading(false);
       return;
     }
 
-    fetchOrder(refFromQuery, tokenFromQuery);
-  }, [refFromQuery, tokenFromQuery]);
+    const timer = setTimeout(() => {
+      fetchOrder(refFromQuery, tokenFromQuery);
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, [refFromQuery, tokenFromQuery, order]);
 
   // Periodic polling if payment is still pending (stops automatically when paid or failed)
   useEffect(() => {

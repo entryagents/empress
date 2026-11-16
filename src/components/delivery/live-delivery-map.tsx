@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { Navigation, MapPin, AlertCircle } from "lucide-react";
+import { Navigation, MapPin, AlertCircle, Compass } from "lucide-react";
 
 interface LiveDeliveryMapProps {
   driverLat?: number | null;
@@ -23,99 +23,59 @@ export function LiveDeliveryMap({
 }: LiveDeliveryMapProps) {
   const hasGps = typeof driverLat === "number" && typeof driverLng === "number";
 
-  // Check if Mapbox / Google Maps API keys are present in env
-  const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-  const googleMapsKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  // Delta State / Edo coordinates fallback (Warri default center: 5.5173, 5.7503)
+  const lat = hasGps ? driverLat : 5.5173;
+  const lng = hasGps ? driverLng : 5.7503;
 
-  // Render defensive coordinates visualizer or Mapbox static preview if token available
-  const staticMapUrl = useMemo(() => {
-    if (!hasGps) return null;
-    if (mapboxToken) {
-      return `https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/pin-s-car+d4b377(${driverLng},${driverLat})/${driverLng},${driverLat},14,0/600x380@2x?access_token=${mapboxToken}`;
-    }
-    if (googleMapsKey) {
-      return `https://maps.googleapis.com/maps/api/staticmap?center=${driverLat},${driverLng}&zoom=14&size=600x380&maptype=roadmap&markers=color:gold%7Clabel:D%7C${driverLat},${driverLng}&key=${googleMapsKey}`;
-    }
-    return null;
-  }, [hasGps, driverLat, driverLng, mapboxToken, googleMapsKey]);
+  // OpenStreetMap embed iframe URL (Completely free, no API keys, zero rate-limiting)
+  const osmEmbedUrl = useMemo(() => {
+    const delta = 0.015;
+    const bbox = `${lng - delta},${lat - delta},${lng + delta},${lat + delta}`;
+    return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(
+      bbox
+    )}&layer=mapnik&marker=${lat},${lng}`;
+  }, [lat, lng]);
 
   return (
     <div
       className={`relative overflow-hidden rounded-xl border border-wine-900/15 bg-wine-950 text-ivory-50 shadow-md ${className}`}
-      style={{ minHeight: "320px" }}
+      style={{ minHeight: "340px" }}
     >
-      {/* Visual Map Canvas / Fallback Interactive Radar */}
-      {staticMapUrl ? (
-        <img
-          src={staticMapUrl}
-          alt="Live Delivery Map"
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-      ) : (
-        <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-radial from-wine-900/80 via-wine-950 to-[#120309]">
-          {/* Subtle Grid Lines to represent geospatial canvas */}
-          <div
-            className="absolute inset-0 opacity-15"
-            style={{
-              backgroundImage:
-                "linear-gradient(to right, rgba(212,179,119,0.2) 1px, transparent 1px), linear-gradient(to bottom, rgba(212,179,119,0.2) 1px, transparent 1px)",
-              backgroundSize: "32px 32px",
-            }}
-          />
+      {/* Free Interactive OpenStreetMap Tile Canvas */}
+      <iframe
+        title="Delivery GPS Tracking Map"
+        src={osmEmbedUrl}
+        className="absolute inset-0 h-full w-full border-0 filter contrast-105 brightness-95 opacity-90"
+        loading="lazy"
+      />
 
-          {hasGps ? (
-            <div className="relative z-10 flex flex-col items-center text-center">
-              {/* Pulsing GPS Radar Node */}
-              <div className="relative flex items-center justify-center mb-4">
-                <div className="absolute size-20 rounded-full bg-champagne-400/20 animate-ping" />
-                <div className="absolute size-14 rounded-full bg-champagne-400/30" />
-                <div className="relative flex size-10 items-center justify-center rounded-full bg-champagne-500 text-wine-950 shadow-lg">
-                  <Navigation className="size-5 transform rotate-45" />
-                </div>
-              </div>
-
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-champagne-400/15 border border-champagne-400/30 px-3 py-1 text-[0.7rem] font-semibold uppercase tracking-widest text-champagne-300">
-                <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-                Courier In Transit
-              </span>
-
-              <p className="mt-3 text-xs font-mono text-ivory-300">
-                Lat {driverLat?.toFixed(4)}°, Lng {driverLng?.toFixed(4)}°
-              </p>
-              {destinationAddress && (
-                <p className="mt-1 text-xs text-ivory-400 max-w-xs truncate">
-                  En route to: {destinationAddress}
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="relative z-10 flex flex-col items-center text-center max-w-xs">
-              <div className="flex size-12 items-center justify-center rounded-full bg-wine-900 border border-champagne-500/20 text-champagne-400 mb-3">
-                <MapPin className="size-6 opacity-75" />
-              </div>
-              <p className="text-sm font-medium text-ivory-200">
-                Awaiting Courier GPS Fix
-              </p>
-              <p className="mt-1 text-xs text-ivory-400">
-                Coordinates will appear on the live radar as soon as the dispatch rider begins the trip.
-              </p>
-            </div>
-          )}
+      {/* Floating Status & HUD Overlay */}
+      <div className="absolute top-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2 pointer-events-none z-10">
+        <div className="pointer-events-auto flex items-center gap-2 rounded-lg border border-wine-900/20 bg-wine-950/85 px-3 py-1.5 backdrop-blur-md shadow-md text-xs">
+          <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="font-semibold text-champagne-300">
+            {hasGps ? "Live OpenStreetMap Radar" : "Empress Logistics Dispatch"}
+          </span>
         </div>
-      )}
 
-      {/* Overlaid Status Indicators */}
-      <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-2 pointer-events-none">
-        {isStale && (
-          <div className="pointer-events-auto flex items-center gap-1.5 rounded-md bg-amber-950/90 border border-amber-600/40 px-2.5 py-1 text-[0.7rem] font-medium text-amber-200 shadow-md">
-            <AlertCircle className="size-3.5 text-amber-400" />
-            <span>Signal paused / Courier may be in transit</span>
+        {destinationAddress && (
+          <div className="pointer-events-auto flex items-center gap-1.5 rounded-lg border border-wine-900/20 bg-wine-950/85 px-3 py-1.5 backdrop-blur-md shadow-md text-[0.7rem] text-ivory-100 max-w-xs truncate">
+            <MapPin className="size-3 text-champagne-400 shrink-0" />
+            <span className="truncate">{destinationAddress}</span>
           </div>
         )}
+      </div>
 
-        {lastUpdated && (
-          <div className="pointer-events-auto ml-auto rounded-md bg-wine-950/80 border border-wine-800/40 px-2.5 py-1 text-[0.7rem] font-mono text-ivory-300 shadow-md">
-            Updated: {new Date(lastUpdated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+      {/* Bottom telemetry overlay */}
+      <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between pointer-events-none z-10">
+        <div className="pointer-events-auto rounded bg-wine-950/90 border border-wine-900/20 px-2.5 py-1 text-[0.65rem] font-mono text-champagne-300/90 backdrop-blur-xs">
+          {lat.toFixed(4)}° N, {lng.toFixed(4)}° E
+        </div>
+
+        {isStale && (
+          <div className="pointer-events-auto flex items-center gap-1.5 rounded bg-amber-950/90 border border-amber-600/30 px-2.5 py-1 text-[0.65rem] text-amber-200">
+            <AlertCircle className="size-3 text-amber-400" />
+            <span>Telemetry buffer delayed</span>
           </div>
         )}
       </div>

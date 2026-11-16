@@ -7,6 +7,9 @@ import {
 } from "@/lib/settings/service";
 import { SettingsClient } from "./settings-client";
 
+export const instant = false;
+
+
 export const metadata = {
   title: "Business Settings & CMS | Empress Delicacies",
   description: "Configure Delta State delivery zones, business hours, pickup rules, and homepage branding",

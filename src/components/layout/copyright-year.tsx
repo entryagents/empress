@@ -1,6 +1,13 @@
-"use cache";
+"use client";
 
-/** Cached so the year is computed at build/revalidate time, not per request. */
-export async function CopyrightYear() {
-  return <>{new Date().getFullYear()}</>;
+import { useEffect, useState } from "react";
+
+export function CopyrightYear() {
+  const [year, setYear] = useState(2026);
+
+  useEffect(() => {
+    setYear(new Date().getFullYear());
+  }, []);
+
+  return <>{year}</>;
 }

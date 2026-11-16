@@ -1,9 +1,9 @@
 import type { CustomerProfile, CustomerAddress } from "@/types/customer";
 import type { Order } from "@/types/order";
-import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getDb } from "@/lib/db";
+import { getCurrentCustomer as getSessionCustomer } from "@/lib/auth/session";
 
-// In-memory runtime stores for environments where Supabase is offline or testing
+// In-memory runtime stores for test cases / local sandboxes
 let runtimeProfiles: CustomerProfile[] = [];
 let runtimeAddresses: CustomerAddress[] = [];
 
@@ -16,41 +16,7 @@ export async function getCurrentCustomer(): Promise<{
   user: { id: string; email: string } | null;
   profile: CustomerProfile | null;
 }> {
-  const supabase = await createSupabaseServerClient();
-  if (supabase) {
-    try {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser();
-
-      if (!error && user && user.email) {
-        // Fetch matching profile
-        const { data: profile } = await supabase
-          .from("customer_profiles")
-          .select("*")
-          .eq("id", user.id)
-          .single();
-
-        return {
-          user: { id: user.id, email: user.email },
-          profile: (profile as CustomerProfile) || {
-            id: user.id,
-            email: user.email,
-            full_name: (user.user_metadata?.full_name as string) || "Valued Customer",
-            phone: (user.user_metadata?.phone as string) || null,
-            role: "customer",
-            created_at: user.created_at || new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-        };
-      }
-    } catch {
-      // Fallback
-    }
-  }
-
-  return { user: null, profile: null };
+  return getSessionCustomer();
 }
 
 /**
@@ -59,17 +25,15 @@ export async function getCurrentCustomer(): Promise<{
  * -------------------------------------------------------------
  */
 export async function getCustomerProfile(userId: string): Promise<CustomerProfile | null> {
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await admin
-        .from("customer_profiles")
-        .select("*")
-        .eq("id", userId)
-        .single();
-      if (!error && data) return data as CustomerProfile;
-    } catch {
-      // Fallback
+      const rows = await sql`
+        SELECT * FROM customer_profiles WHERE id = ${userId} LIMIT 1;
+      `;
+      if (rows && rows.length > 0) return rows[0] as CustomerProfile;
+    } catch (e) {
+      console.warn("Neon getCustomerProfile failed, falling back:", e);
     }
   }
 
@@ -80,25 +44,23 @@ export async function updateCustomerProfile(
   userId: string,
   input: { full_name: string; phone?: string | null }
 ): Promise<CustomerProfile> {
-  const admin = getSupabaseAdminClient();
-  if (admin) {
-    try {
-      const { data, error } = await admin
-        .from("customer_profiles")
-        .update({
-          full_name: input.full_name.trim(),
-          phone: input.phone ? input.phone.trim() : null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", userId)
-        .select()
-        .single();
+  const sql = getDb();
+  const now = new Date().toISOString();
 
-      if (!error && data) {
-        return data as CustomerProfile;
-      }
-    } catch {
-      // Fallback
+  if (sql) {
+    try {
+      const rows = await sql`
+        INSERT INTO customer_profiles (id, email, full_name, phone, role, created_at, updated_at)
+        VALUES (${userId}, 'customer@empress.ng', ${input.full_name.trim()}, ${input.phone ? input.phone.trim() : null}, 'customer', ${now}, ${now})
+        ON CONFLICT (id) DO UPDATE SET
+          full_name = EXCLUDED.full_name,
+          phone = EXCLUDED.phone,
+          updated_at = EXCLUDED.updated_at
+        RETURNING *;
+      `;
+      if (rows && rows.length > 0) return rows[0] as CustomerProfile;
+    } catch (e) {
+      console.warn("Neon updateCustomerProfile failed, using memory:", e);
     }
   }
 
@@ -109,19 +71,19 @@ export async function updateCustomerProfile(
       ...runtimeProfiles[idx],
       full_name: input.full_name.trim(),
       phone: input.phone ? input.phone.trim() : null,
-      updated_at: new Date().toISOString(),
+      updated_at: now,
     };
     return runtimeProfiles[idx];
   }
 
   const fallback: CustomerProfile = {
     id: userId,
-    email: "customer@example.ng",
+    email: "customer@empress.ng",
     full_name: input.full_name.trim(),
     phone: input.phone || null,
     role: "customer",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    created_at: now,
+    updated_at: now,
   };
   runtimeProfiles.push(fallback);
   return fallback;
@@ -133,19 +95,17 @@ export async function updateCustomerProfile(
  * -------------------------------------------------------------
  */
 export async function getCustomerAddresses(userId: string): Promise<CustomerAddress[]> {
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      const { data, error } = await admin
-        .from("customer_addresses")
-        .select("*")
-        .eq("customer_id", userId)
-        .order("is_default", { ascending: false })
-        .order("created_at", { ascending: false });
-
-      if (!error && data) return data as CustomerAddress[];
-    } catch {
-      // Fallback
+      const rows = await sql`
+        SELECT * FROM customer_addresses
+        WHERE customer_id = ${userId}
+        ORDER BY is_default DESC, created_at DESC;
+      `;
+      return rows as CustomerAddress[];
+    } catch (e) {
+      console.warn("Neon getCustomerAddresses failed, using memory:", e);
     }
   }
 
@@ -158,66 +118,71 @@ export async function saveCustomerAddress(
   userId: string,
   address: Omit<CustomerAddress, "id" | "customer_id" | "created_at" | "updated_at"> & { id?: string }
 ): Promise<CustomerAddress> {
-  const admin = getSupabaseAdminClient();
+  const sql = getDb();
   const now = new Date().toISOString();
 
-  // If this address is set as default, unset other defaults
-  if (address.is_default) {
-    if (admin) {
-      await admin.from("customer_addresses").update({ is_default: false }).eq("customer_id", userId);
-    }
-    runtimeAddresses.forEach((a) => {
-      if (a.customer_id === userId) a.is_default = false;
-    });
-  }
-
-  if (address.id) {
-    // Update existing address
-    if (admin) {
-      try {
-        const { data, error } = await admin
-          .from("customer_addresses")
-          .update({
-            label: address.label,
-            state: address.state,
-            city: address.city,
-            area: address.area,
-            street_address: address.street_address,
-            building_number: address.building_number || null,
-            landmark: address.landmark || null,
-            delivery_instructions: address.delivery_instructions || null,
-            is_default: address.is_default,
-            updated_at: now,
-          })
-          .eq("id", address.id)
-          .eq("customer_id", userId)
-          .select()
-          .single();
-
-        if (!error && data) return data as CustomerAddress;
-      } catch {
-        // Fallback
-      }
-    }
-
-    const idx = runtimeAddresses.findIndex((a) => a.id === address.id && a.customer_id === userId);
-    if (idx >= 0) {
-      runtimeAddresses[idx] = {
-        ...runtimeAddresses[idx],
-        ...address,
-        updated_at: now,
-      };
-      return runtimeAddresses[idx];
+  // If this address is default, reset others
+  if (address.is_default && sql) {
+    try {
+      await sql`
+        UPDATE customer_addresses SET is_default = FALSE WHERE customer_id = ${userId};
+      `;
+    } catch (e) {
+      console.warn("Could not reset default address on Neon:", e);
     }
   }
 
-  // Create new address
+  if (address.id && sql) {
+    try {
+      const rows = await sql`
+        UPDATE customer_addresses SET
+          label = ${address.label},
+          state = ${address.state},
+          city = ${address.city},
+          area = ${address.area},
+          street_address = ${address.street_address},
+          building_number = ${address.building_number || null},
+          landmark = ${address.landmark || null},
+          delivery_instructions = ${address.delivery_instructions || null},
+          is_default = ${address.is_default},
+          updated_at = ${now}
+        WHERE id = ${address.id} AND customer_id = ${userId}
+        RETURNING *;
+      `;
+      if (rows && rows.length > 0) return rows[0] as CustomerAddress;
+    } catch (e) {
+      console.warn("Neon update address failed, using memory:", e);
+    }
+  }
+
+  const id = address.id || `addr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  if (sql) {
+    try {
+      const rows = await sql`
+        INSERT INTO customer_addresses (
+          id, customer_id, label, state, city, area, street_address,
+          building_number, landmark, delivery_instructions, is_default, created_at, updated_at
+        ) VALUES (
+          ${id}, ${userId}, ${address.label || "Home"}, ${address.state || "Delta State"},
+          ${address.city}, ${address.area}, ${address.street_address},
+          ${address.building_number || null}, ${address.landmark || null},
+          ${address.delivery_instructions || null}, ${address.is_default || false},
+          ${now}, ${now}
+        )
+        RETURNING *;
+      `;
+      if (rows && rows.length > 0) return rows[0] as CustomerAddress;
+    } catch (e) {
+      console.warn("Neon insert address failed, using memory:", e);
+    }
+  }
+
   const newAddr: CustomerAddress = {
-    id: `addr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    id,
     customer_id: userId,
     label: address.label || "Home",
-    state: address.state || "Lagos",
-    city: address.city || "Lagos",
+    state: address.state || "Delta State",
+    city: address.city || "Warri",
     area: address.area,
     street_address: address.street_address,
     building_number: address.building_number || null,
@@ -228,26 +193,19 @@ export async function saveCustomerAddress(
     updated_at: now,
   };
 
-  if (admin) {
-    try {
-      const { data, error } = await admin.from("customer_addresses").insert([newAddr]).select().single();
-      if (!error && data) return data as CustomerAddress;
-    } catch {
-      // Fallback
-    }
-  }
-
   runtimeAddresses.push(newAddr);
   return newAddr;
 }
 
 export async function deleteCustomerAddress(userId: string, addressId: string): Promise<boolean> {
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      await admin.from("customer_addresses").delete().eq("id", addressId).eq("customer_id", userId);
-    } catch {
-      // Fallback
+      await sql`
+        DELETE FROM customer_addresses WHERE id = ${addressId} AND customer_id = ${userId};
+      `;
+    } catch (e) {
+      console.warn("Neon deleteCustomerAddress failed:", e);
     }
   }
 
@@ -261,23 +219,47 @@ export async function deleteCustomerAddress(userId: string, addressId: string): 
  * -------------------------------------------------------------
  */
 export async function getCustomerOrders(userId: string, email?: string): Promise<Order[]> {
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      let query = admin
-        .from("orders")
-        .select("*, items:order_items(*)")
-        .or(`user_id.eq.${userId}${email ? `,customer_email.eq.${email.toLowerCase()}` : ""}`)
-        .order("created_at", { ascending: false });
-
-      const { data, error } = await query;
-      if (!error && data) return data as Order[];
-    } catch {
-      // Fallback
+      const rows = await sql`
+        SELECT o.*,
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'id', oi.id,
+                'order_id', oi.order_id,
+                'product_id', oi.product_id,
+                'product_name', oi.product_name,
+                'product_sku', oi.product_sku,
+                'product_image_url', oi.product_image_url,
+                'category_name', oi.category_name,
+                'variant_id', oi.variant_id,
+                'variant_name', oi.variant_name,
+                'variant_price_adjustment_kobo', oi.variant_price_adjustment_kobo,
+                'base_price_kobo', oi.base_price_kobo,
+                'addons_total_kobo', oi.addons_total_kobo,
+                'unit_price_kobo', oi.unit_price_kobo,
+                'quantity', oi.quantity,
+                'total_price_kobo', oi.total_price_kobo,
+                'special_instructions', oi.special_instructions,
+                'addons', oi.addons
+              )
+            ) FILTER (WHERE oi.id IS NOT NULL),
+            '[]'::json
+          ) as items
+        FROM orders o
+        LEFT JOIN order_items oi ON o.id = oi.order_id
+        WHERE o.user_id = ${userId} OR (${email || null}::text IS NOT NULL AND LOWER(o.customer_email) = LOWER(${email || ""}))
+        GROUP BY o.id
+        ORDER BY o.created_at DESC;
+      `;
+      return rows as Order[];
+    } catch (e) {
+      console.warn("Neon getCustomerOrders failed, checking in-memory:", e);
     }
   }
 
-  // Search runtime orders
   const { getAdminOrders } = await import("@/lib/order/service");
   const allOrders = await getAdminOrders(100);
   return allOrders.filter(
@@ -285,10 +267,6 @@ export async function getCustomerOrders(userId: string, email?: string): Promise
   );
 }
 
-/**
- * Associates eligible previous guest orders with the customer's account.
- * Requires matching customer_email AND verifying via secure_access_token or verified phone number.
- */
 export async function claimGuestOrderForAccount(
   userId: string,
   userEmail: string,
@@ -302,7 +280,6 @@ export async function claimGuestOrderForAccount(
     return { success: false, message: "Order verification failed. Ensure the reference and contact info match." };
   }
 
-  // Check that the order was actually placed under the claiming customer's email address
   if (order.customer_email.toLowerCase() !== userEmail.toLowerCase()) {
     return {
       success: false,
@@ -310,13 +287,14 @@ export async function claimGuestOrderForAccount(
     };
   }
 
-  // Associate order with account
-  const admin = getSupabaseAdminClient();
-  if (admin) {
+  const sql = getDb();
+  if (sql) {
     try {
-      await admin.from("orders").update({ user_id: userId }).eq("id", order.id);
-    } catch {
-      // Fallback
+      await sql`
+        UPDATE orders SET user_id = ${userId} WHERE id = ${order.id};
+      `;
+    } catch (e) {
+      console.warn("Neon link order to user failed:", e);
     }
   }
 

@@ -9,11 +9,14 @@ import {
 import { DriverDashboardClient } from "./delivery-client";
 import Link from "next/link";
 import { Lock } from "lucide-react";
+import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
 
 export const metadata = {
   title: "Courier Mobile Portal | Empress Delicacies",
   description: "Dedicated delivery personnel console for assignments and GPS transit tracking",
 };
+
+export const instant = false;
 
 async function DriverDataLoader() {
   await connection();
@@ -50,12 +53,14 @@ async function DriverDataLoader() {
   const assignments = await getAssignmentsForDriver(currentDriver.id);
 
   return (
-    <div className="min-h-screen bg-ivory-100/60 px-4 py-6 sm:px-6">
-      <DriverDashboardClient
-        initialDriver={currentDriver}
-        initialAssignments={assignments}
-      />
-    </div>
+    <AuthenticatedShell role="delivery_driver">
+      <div className="max-w-4xl mx-auto">
+        <DriverDashboardClient
+          initialDriver={currentDriver}
+          initialAssignments={assignments}
+        />
+      </div>
+    </AuthenticatedShell>
   );
 }
 

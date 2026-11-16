@@ -1,6 +1,9 @@
 import { getCategories, getProducts } from "@/lib/catalogue/service";
 import { CategoriesClient } from "./categories-client";
 
+export const instant = false;
+
+
 export const metadata = {
   title: "Category Management | Empress Admin",
 };

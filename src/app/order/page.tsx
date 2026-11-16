@@ -7,6 +7,8 @@ export const metadata = {
   description: "Secure culinary order placement with Nigerian delivery address validation and transparent pricing.",
 };
 
+export const instant = false;
+
 export default async function OrderPage() {
   const [deliveryZones, { user, profile }] = await Promise.all([
     getDeliveryZones(),

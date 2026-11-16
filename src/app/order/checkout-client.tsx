@@ -27,6 +27,7 @@ import { formatKobo } from "@/types/catalogue";
 import type { DeliveryZone, CartItemInput, CustomerCheckoutInput, PricingSummary } from "@/types/order";
 import { validateCartAction, submitCheckoutOrderAction, applyCouponAction } from "./actions";
 import { DEFAULT_PICKUP_LOCATION } from "@/lib/order/config";
+import { StreetAutocomplete } from "@/components/delivery/street-autocomplete";
 
 import type { CustomerAddress } from "@/types/customer";
 
@@ -100,38 +101,25 @@ export function CheckoutClient({ deliveryZones, customer, savedAddresses = [] }:
     specialInstructions: i.specialInstructions,
   }));
 
-  // Server re-validation whenever cart items, fulfilment method, zone, or coupon changes
-  useEffect(() => {
-    if (items.length === 0) return;
-
-    let isMounted = true;
-    startTransition(async () => {
-      const res = await validateCartAction(
-        cartInputItems,
-        orderMode,
-        orderMode === "delivery" ? selectedZoneId : undefined,
-        appliedCouponCode
-      );
-
-      if (isMounted) {
-        if (res.success && res.result) {
-          setPricing(res.result.pricing);
-          setWarnings(res.result.warnings || []);
-          if (!res.result.isValid) {
-            setErrorMsg(res.result.errors.join(" "));
-          } else {
-            setErrorMsg(null);
-          }
-        }
-      }
-    });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [items, orderMode, selectedZoneId, appliedCouponCode]);
-
   const activeZone = deliveryZones.find((z) => z.id === selectedZoneId);
+
+  // Compute subtotal and delivery fee directly without server waterfalls
+  useEffect(() => {
+    const subtotalKobo = items.reduce((acc, item) => {
+      return acc + item.unitPriceKobo * item.quantity;
+    }, 0);
+
+    const deliveryFeeKobo = orderMode === "delivery" && activeZone ? activeZone.fee_kobo : 0;
+    const totalKobo = subtotalKobo + deliveryFeeKobo;
+
+    setPricing({
+      currency: "NGN",
+      subtotalKobo,
+      deliveryFeeKobo,
+      discountKobo: 0,
+      totalKobo,
+    });
+  }, [items, orderMode, activeZone]);
 
   // Handle Coupon Application
   const handleApplyCoupon = async (e: React.FormEvent) => {
@@ -479,14 +467,14 @@ export function CheckoutClient({ deliveryZones, customer, savedAddresses = [] }:
                         <label className="block text-xs font-semibold uppercase tracking-wider text-wine-900">
                           Street Address *
                         </label>
-                        <input
-                          type="text"
-                          required
-                          value={streetAddress}
-                          onChange={(e) => setStreetAddress(e.target.value)}
-                          placeholder="e.g. Admiralty Way, off Freedom Way"
-                          className="mt-1.5 w-full rounded border border-wine-900/20 bg-ivory-50/50 px-3.5 py-2 text-sm text-wine-950 focus:border-champagne-500 focus:outline-none"
-                        />
+                        <div className="mt-1.5">
+                          <StreetAutocomplete
+                            value={streetAddress}
+                            onChange={setStreetAddress}
+                            selectedCity={activeZone?.city || "Warri"}
+                            placeholder="e.g. Airport Road, Enerhen Junction, Deco Road..."
+                          />
+                        </div>
                       </div>
 
                       <div>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Lock, Mail, User, Phone, AlertCircle, CheckCircle2 } from "lucide-react";
 import { customerSignUpAction } from "../actions";
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 
 export function SignUpForm() {
   const router = useRouter();
@@ -84,7 +85,21 @@ export function SignUpForm() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+          <div className="mt-6">
+            <GoogleSignInButton label="Sign up with Google" />
+            <div className="relative my-5">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-wine-900/10" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-white px-2 text-[0.65rem] font-semibold text-wine-500">
+                  Or register with email
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-wine-900">
                 Full Name *

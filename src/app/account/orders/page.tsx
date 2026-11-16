@@ -1,6 +1,9 @@
 import { getCurrentCustomer, getCustomerOrders } from "@/lib/customer/service";
 import { CustomerOrdersClient } from "./orders-client";
 
+export const instant = false;
+
+
 export const metadata = {
   title: "Order History | Empress Delicacies",
 };
