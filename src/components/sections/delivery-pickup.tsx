@@ -63,6 +63,66 @@ export function DeliveryPickup() {
             </Reveal>
           ))}
         </div>
+
+        {/* Configured Delivery Zones Showcase */}
+        <div className="mt-12 rounded-[2px] border border-wine-900/10 bg-white p-8 sm:p-10 shadow-soft">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-wine-900/10 pb-6">
+            <div>
+              <span className="eyebrow text-champagne-600">Coverage &amp; Delivery Hubs</span>
+              <h3 className="mt-1 font-serif text-2xl font-light text-wine-950">Active Regional Service Zones</h3>
+            </div>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-600/30 bg-emerald-50 px-3.5 py-1 text-xs font-semibold text-emerald-800">
+              <span className="size-2 rounded-full bg-emerald-500 animate-pulse" /> Dispatch Active
+            </span>
+          </div>
+
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="rounded border border-wine-900/10 bg-ivory-50/70 p-4">
+              <h4 className="font-serif font-semibold text-wine-950 text-sm">Warri &amp; Effurun Central</h4>
+              <p className="mt-1 text-xs text-wine-700">Airport Road, Effurun GRA, PTI Road, Enerhen, Deco Road, Ekpan, Refinery</p>
+              <div className="mt-3 flex items-center justify-between text-xs border-t border-wine-900/10 pt-2 text-wine-800 font-medium">
+                <span>Est. Delivery: 35–50 mins</span>
+                <span className="font-semibold text-wine-950">₦1,500</span>
+              </div>
+            </div>
+
+            <div className="rounded border border-wine-900/10 bg-ivory-50/70 p-4">
+              <h4 className="font-serif font-semibold text-wine-950 text-sm">Asaba Capital Territory</h4>
+              <p className="mt-1 text-xs text-wine-700">Nnebisi Road, Okpanam Road, DBS Road, Summit Road, Dennis Osadebay Way, Cable Point</p>
+              <div className="mt-3 flex items-center justify-between text-xs border-t border-wine-900/10 pt-2 text-wine-800 font-medium">
+                <span>Est. Delivery: 45–60 mins</span>
+                <span className="font-semibold text-wine-950">₦2,500</span>
+              </div>
+            </div>
+
+            <div className="rounded border border-wine-900/10 bg-ivory-50/70 p-4">
+              <h4 className="font-serif font-semibold text-wine-950 text-sm">Ughelli Metropolitan</h4>
+              <p className="mt-1 text-xs text-wine-700">Market Road, Otovwodo Junction, Isoko Road, Afiesere, Post Office, Ekuigbo</p>
+              <div className="mt-3 flex items-center justify-between text-xs border-t border-wine-900/10 pt-2 text-wine-800 font-medium">
+                <span>Est. Delivery: 40–55 mins</span>
+                <span className="font-semibold text-wine-950">₦2,000</span>
+              </div>
+            </div>
+
+            <div className="rounded border border-wine-900/10 bg-ivory-50/70 p-4">
+              <h4 className="font-serif font-semibold text-wine-950 text-sm">Abraka University Community</h4>
+              <p className="mt-1 text-xs text-wine-700">DELSU Main Gate, Campus 2 &amp; 3, Old Sapele-Agbor Road, Beach Road</p>
+              <div className="mt-3 flex items-center justify-between text-xs border-t border-wine-900/10 pt-2 text-wine-800 font-medium">
+                <span>Est. Delivery: 45–65 mins</span>
+                <span className="font-semibold text-wine-950">₦2,200</span>
+              </div>
+            </div>
+
+            <div className="rounded border border-wine-900/10 bg-ivory-50/70 p-4 sm:col-span-2 lg:col-span-2">
+              <h4 className="font-serif font-semibold text-wine-950 text-sm">Benin City Hub</h4>
+              <p className="mt-1 text-xs text-wine-700">Airport Road GRA, Sapele Road, Ring Road, Akpakpava, Uselu, Ekenwan</p>
+              <div className="mt-3 flex items-center justify-between text-xs border-t border-wine-900/10 pt-2 text-wine-800 font-medium">
+                <span>Est. Delivery: 60–90 mins</span>
+                <span className="font-semibold text-wine-950">₦3,500</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   );

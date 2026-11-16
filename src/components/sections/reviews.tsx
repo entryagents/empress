@@ -23,14 +23,21 @@ export async function Reviews() {
           </SectionHeading>
 
           {/* Real stats badge */}
-          <div className="inline-flex items-center gap-2 rounded-full border border-champagne-500/30 bg-champagne-500/10 px-4 py-1.5 text-xs text-wine-950 font-medium">
-            <div className="flex items-center gap-0.5 text-champagne-600">
-              <Star className="size-3.5 fill-current" />
+          {publicData.totalReviews > 0 ? (
+            <div className="inline-flex items-center gap-2 rounded-full border border-champagne-500/30 bg-champagne-500/10 px-4 py-1.5 text-xs text-wine-950 font-medium">
+              <div className="flex items-center gap-0.5 text-champagne-600">
+                <Star className="size-3.5 fill-current" />
+              </div>
+              <span>
+                {publicData.averageRating} / 5.0 Rating ({publicData.totalReviews} Verified Review{publicData.totalReviews === 1 ? "" : "s"})
+              </span>
             </div>
-            <span>
-              {publicData.averageRating} / 5.0 Rating ({publicData.totalReviews} Verified Review{publicData.totalReviews === 1 ? "" : "s"})
-            </span>
-          </div>
+          ) : (
+            <div className="inline-flex items-center gap-2 rounded-full border border-wine-900/10 bg-white/70 px-4 py-1.5 text-xs text-wine-800">
+              <Star className="size-3.5 text-wine-400" />
+              <span>Awaiting First Verified Reviews</span>
+            </div>
+          )}
         </div>
 
         {/* Reviews Grid */}

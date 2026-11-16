@@ -331,7 +331,7 @@ export async function getPublicReviews(productId?: string): Promise<PublicReview
   const avgRating =
     totalReviews > 0
       ? parseFloat((approved.reduce((acc, r) => acc + r.rating, 0) / totalReviews).toFixed(1))
-      : 5.0;
+      : 0;
 
   return {
     averageRating: avgRating,

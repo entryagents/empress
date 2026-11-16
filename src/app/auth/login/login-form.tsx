@@ -30,8 +30,7 @@ export function LoginForm() {
     try {
       const res = await customerLoginAction(formData);
       if (res.success) {
-        router.push(redirectTarget);
-        router.refresh();
+        window.location.href = redirectTarget;
       } else {
         setErrorMsg(res.error || "Invalid email or password.");
       }

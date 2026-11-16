@@ -11,7 +11,38 @@ import {
   deleteCustomerAddress,
   claimGuestOrderForAccount,
 } from "@/lib/customer/service";
-import { headers } from "next/headers";
+import { headers, cookies } from "next/headers";
+
+async function forwardAuthCookies(res: Response) {
+  const cookieStore = await cookies();
+  const getSetCookie = (res.headers as any).getSetCookie?.bind(res.headers);
+  const cookieStrings: string[] = getSetCookie ? getSetCookie() : [res.headers.get("set-cookie")].filter(Boolean) as string[];
+
+  for (const cookieStr of cookieStrings) {
+    if (!cookieStr) continue;
+    const parts = cookieStr.split(";").map((p) => p.trim());
+    const [name, ...valParts] = parts[0].split("=");
+    const value = valParts.join("=");
+    if (!name) continue;
+
+    const options: any = {};
+    for (let i = 1; i < parts.length; i++) {
+      const [key, ...optValParts] = parts[i].split("=");
+      const optKey = key.toLowerCase();
+      const optVal = optValParts.join("=");
+
+      if (optKey === "path") options.path = optVal || "/";
+      else if (optKey === "max-age") options.maxAge = parseInt(optVal, 10);
+      else if (optKey === "httponly") options.httpOnly = true;
+      else if (optKey === "secure") options.secure = true;
+      else if (optKey === "samesite") options.sameSite = optVal.toLowerCase() as any;
+      else if (optKey === "expires") options.expires = new Date(optVal);
+      else if (optKey === "domain") options.domain = optVal;
+    }
+
+    cookieStore.set(name, value, options);
+  }
+}
 
 /**
  * -------------------------------------------------------------
@@ -33,21 +64,34 @@ export async function customerSignUpAction(formData: FormData) {
   }
 
   try {
-    const res = await auth.api.signUpEmail({
+    const rawRes = await auth.api.signUpEmail({
       body: {
         email,
         password,
         name: fullName,
       },
+      asResponse: true,
     });
 
-    if (res && res.user) {
+    if (!rawRes.ok) {
+      let errMsg = "Failed to create account.";
+      try {
+        const body = await rawRes.json();
+        errMsg = body.message || errMsg;
+      } catch {}
+      return { success: false, error: errMsg };
+    }
+
+    await forwardAuthCookies(rawRes);
+    const data = await rawRes.json();
+
+    if (data && data.user) {
       // Save full_name and phone to customer_profiles
       const sql = getDb();
       if (sql) {
         await sql`
           INSERT INTO customer_profiles (id, email, full_name, phone, role)
-          VALUES (${res.user.id}, ${email}, ${fullName}, ${phone || null}, 'customer')
+          VALUES (${data.user.id}, ${email}, ${fullName}, ${phone || null}, 'customer')
           ON CONFLICT (id) DO UPDATE SET
             full_name = EXCLUDED.full_name,
             phone = EXCLUDED.phone;
@@ -77,14 +121,27 @@ export async function customerLoginAction(formData: FormData) {
   }
 
   try {
-    const res = await auth.api.signInEmail({
+    const rawRes = await auth.api.signInEmail({
       body: {
         email,
         password,
       },
+      asResponse: true,
     });
 
-    if (res && res.user) {
+    if (!rawRes.ok) {
+      let errMsg = "Invalid email or password.";
+      try {
+        const body = await rawRes.json();
+        errMsg = body.message || errMsg;
+      } catch {}
+      return { success: false, error: errMsg };
+    }
+
+    await forwardAuthCookies(rawRes);
+    const data = await rawRes.json();
+
+    if (data && data.user) {
       revalidatePath("/account");
       revalidatePath("/order");
       return { success: true };

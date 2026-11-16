@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Plus, Check, Clock, Sparkles } from "lucide-react";
+import { Plus, Check, Clock } from "lucide-react";
 import { categories, formatPrice, products, type CategoryId, type Product } from "@/data/catalogue";
 import { FoodImage } from "@/components/ui/food-image";
 
@@ -52,11 +52,6 @@ export function Signature() {
           >
             Explore our curated culinary lineup. Every order is freshly prepared for rapid delivery or prompt customer collection.
           </SectionHeading>
-
-          <div className="inline-flex items-center gap-2 rounded-full border border-wine-900/15 bg-white/70 px-4 py-1.5 text-xs text-wine-800 backdrop-blur-xs">
-            <Sparkles className="size-3.5 text-champagne-500" />
-            <span>Interactive Demo: Tap <strong>Add to Order</strong> to test the cart</span>
-          </div>
         </div>
 
         {/* Filter pills */}
@@ -144,9 +139,6 @@ export function Signature() {
                       <div>
                         <span className="block font-serif text-xl font-semibold tracking-tight text-wine-950">
                           {formatPrice(p.price)}
-                        </span>
-                        <span className="block text-[0.65rem] text-wine-700 uppercase tracking-widest">
-                          Initial Price Benchmark
                         </span>
                       </div>
 

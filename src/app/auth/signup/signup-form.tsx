@@ -36,8 +36,7 @@ export function SignUpForm() {
       const res = await customerSignUpAction(formData);
       if (res.success) {
         if (res.hasSession) {
-          router.push(redirectTarget);
-          router.refresh();
+          window.location.href = redirectTarget;
         } else {
           setSuccessMsg(res.message || "Account created! Please check your email for confirmation.");
         }

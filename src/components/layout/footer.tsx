@@ -16,7 +16,7 @@ export function Footer() {
             Good Food. Unforgettable Moments.
           </p>
           <p className="mt-4 max-w-sm text-sm text-ivory-200/75 leading-relaxed font-light">
-            Handcrafted shawarma, authentic small chops, stir-fried noodles, prime grills, fresh seafood and specialties prepared to order for citywide delivery and customer pickup.
+            Handcrafted shawarma, authentic small chops, stir-fried noodles, prime grills, fresh seafood and specialties prepared to order for delivery across Warri, Effurun, Asaba, Ughelli, and Abraka, as well as prompt customer collection.
           </p>
 
           <div className="mt-8 flex flex-wrap gap-4 text-xs font-semibold uppercase tracking-wider text-champagne-400">

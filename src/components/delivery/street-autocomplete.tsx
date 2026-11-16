@@ -112,24 +112,17 @@ export function StreetAutocomplete({
       s.toLowerCase().includes(query.toLowerCase())
     );
 
-    // Debounced free geocoding query to OpenStreetMap Nominatim
+    // Debounced query to internal live places search proxy
     const timer = setTimeout(async () => {
       setIsLoading(true);
       try {
-        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
-          `${query}, ${selectedCity}, Nigeria`
-        )}&format=json&addressdetails=1&limit=5`;
-        
-        const res = await fetch(url, {
-          headers: {
-            "Accept-Language": "en",
-          },
-        });
+        const url = `/api/places?q=${encodeURIComponent(query)}&city=${encodeURIComponent(selectedCity)}`;
+        const res = await fetch(url);
 
         if (res.ok) {
           const data = await res.json();
-          const nominatimNames = data.map((item: any) => item.display_name.split(",").slice(0, 3).join(",").trim());
-          const merged = Array.from(new Set([...localMatches, ...nominatimNames])).slice(0, 6);
+          const placeNames = (data.results || []).map((r: any) => r.displayName);
+          const merged = Array.from(new Set([...placeNames, ...localMatches])).slice(0, 8);
           setSuggestions(merged);
           setIsOpen(merged.length > 0);
         } else {
@@ -142,7 +135,7 @@ export function StreetAutocomplete({
       } finally {
         setIsLoading(false);
       }
-    }, 350);
+    }, 280);
 
     return () => clearTimeout(timer);
   }, [value, selectedCity]);

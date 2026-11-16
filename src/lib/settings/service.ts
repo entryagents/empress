@@ -22,8 +22,8 @@ let runtimeSettings: BusinessSettings = {
   city: "Warri",
   currency: "NGN",
   currency_symbol: "₦",
-  opening_time: "10:00",
-  closing_time: "22:00",
+  opening_time: "07:00",
+  closing_time: "20:00",
   operating_days: [
     "Monday",
     "Tuesday",

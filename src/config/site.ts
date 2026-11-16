@@ -38,9 +38,7 @@ export const contact = {
   email: "orders@empressdelicacies.com",
   address: "Empress Delicacies Culinary Studio, Delta State, Nigeria",
   hours: [
-    { day: "Monday – Thursday", time: "11:00 AM – 10:30 PM" },
-    { day: "Friday – Saturday", time: "11:00 AM – Midnight" },
-    { day: "Sunday", time: "12:00 PM – 10:00 PM" },
+    { day: "Monday – Sunday", time: "7:00 AM – 8:00 PM" },
   ],
 } as const;
 
