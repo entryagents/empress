@@ -56,6 +56,13 @@ export default function AdminLayout({
                 Fleet &amp; Dispatch
               </Link>
               <Link
+                href="/admin/settings"
+                className="flex items-center gap-1.5 rounded px-3 py-1.5 transition-colors hover:bg-wine-900/60 hover:text-champagne-300"
+              >
+                <UtensilsCrossed className="size-3.5 text-champagne-400" />
+                Settings &amp; Zones
+              </Link>
+              <Link
                 href="/admin/payments"
                 className="flex items-center gap-1.5 rounded px-3 py-1.5 transition-colors hover:bg-wine-900/60 hover:text-champagne-300"
               >

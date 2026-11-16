@@ -43,22 +43,9 @@ export function generateSecureAccessToken(): string {
  * -------------------------------------------------------------
  */
 export async function getDeliveryZones(): Promise<DeliveryZone[]> {
-  const supabase = getSupabaseServerClient();
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from("delivery_zones")
-        .select("*")
-        .eq("is_active", true)
-        .order("display_order", { ascending: true });
-      if (!error && data && data.length > 0) {
-        return data as DeliveryZone[];
-      }
-    } catch {
-      // Fallback to runtime
-    }
-  }
-  return runtimeDeliveryZones.filter((z) => z.is_active).sort((a, b) => a.display_order - b.display_order);
+  const { getAdminDeliveryZones } = await import("@/lib/settings/service");
+  const zones = await getAdminDeliveryZones();
+  return zones.filter((z) => z.is_active).sort((a, b) => a.display_order - b.display_order);
 }
 
 export async function getDeliveryZoneById(id: string): Promise<DeliveryZone | null> {
@@ -349,6 +336,32 @@ export async function createOrder(
     }
     if (!checkoutInput.phone || checkoutInput.phone.trim().length < 8) {
       return { success: false, error: "A valid Nigerian phone number is required." };
+    }
+
+    // Verify Business Hours & Availability in Africa/Lagos (UTC+1)
+    const { checkBusinessAvailability, getBusinessSettings } = await import("@/lib/settings/service");
+    const availability = await checkBusinessAvailability();
+    if (!availability.canAcceptOrders) {
+      return {
+        success: false,
+        error:
+          availability.reason ||
+          "Empress Delicacies is currently closed and unable to accept orders at this time.",
+      };
+    }
+
+    const bizSettings = await getBusinessSettings();
+    if (checkoutInput.fulfillment_type === "delivery" && !bizSettings.delivery_enabled) {
+      return {
+        success: false,
+        error: "Home delivery is temporarily paused by the kitchen. Please choose Customer Pickup.",
+      };
+    }
+    if (checkoutInput.fulfillment_type === "pickup" && !bizSettings.pickup_enabled) {
+      return {
+        success: false,
+        error: "Customer pickup is currently disabled. Please select Home Delivery.",
+      };
     }
 
     // Fulfilment-specific address validation

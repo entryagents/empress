@@ -36,7 +36,7 @@ export const contact = {
   phone: "+234 (0) 800 EMPRESS",
   phoneRaw: "+2348003677377",
   email: "orders@empressdelicacies.com",
-  address: "Victoria Island & Lekki Delivery Hubs, Lagos, Nigeria",
+  address: "Empress Delicacies Culinary Studio, Delta State, Nigeria",
   hours: [
     { day: "Monday – Thursday", time: "11:00 AM – 10:30 PM" },
     { day: "Friday – Saturday", time: "11:00 AM – Midnight" },

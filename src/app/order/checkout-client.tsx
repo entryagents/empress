@@ -182,9 +182,9 @@ export function CheckoutClient({ deliveryZones, customer, savedAddresses = [] }:
       address:
         orderMode === "delivery"
           ? {
-              state: activeZone?.state || "Lagos",
-              city: activeZone?.city || "Lagos",
-              area: area || activeZone?.name || "Lagos",
+              state: activeZone?.state || "Delta State",
+              city: activeZone?.city || "Asaba",
+              area: area || activeZone?.name || "Delta State",
               street_address: streetAddress,
               building_number: buildingNumber || undefined,
               landmark: landmark || undefined,
@@ -664,55 +664,6 @@ export function CheckoutClient({ deliveryZones, customer, savedAddresses = [] }:
                     );
                   })}
                 </ul>
-
-                {/* Coupon Input Form */}
-                <div className="mt-4 border-t border-wine-900/10 pt-4">
-                  {appliedCouponCode ? (
-                    <div className="flex items-center justify-between rounded bg-champagne-500/10 border border-champagne-500/30 px-3 py-2 text-xs">
-                      <div className="flex items-center gap-2">
-                        <Tag className="size-3.5 text-champagne-600" />
-                        <span className="font-mono font-semibold text-wine-950">{appliedCouponCode}</span>
-                        <span className="text-[0.65rem] text-champagne-700">Applied</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleRemoveCoupon}
-                        className="text-[0.68rem] text-rose-600 hover:underline"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ) : (
-                    <form onSubmit={handleApplyCoupon} className="flex gap-2">
-                      <div className="relative flex-1">
-                        <Tag className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3 text-wine-400" />
-                        <input
-                          type="text"
-                          value={couponCode}
-                          onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                          placeholder="Privilege Code (e.g. WELCOME10)"
-                          className="w-full rounded border border-wine-900/20 bg-ivory-50/50 pl-7 pr-2 py-1.5 text-xs text-wine-950 uppercase font-mono placeholder:normal-case placeholder:text-wine-400 focus:outline-none focus:border-champagne-500"
-                        />
-                      </div>
-                      <button
-                        type="submit"
-                        className="rounded bg-wine-900 px-3 py-1.5 text-xs font-semibold text-ivory-50 hover:bg-wine-800 transition-colors"
-                      >
-                        Apply
-                      </button>
-                    </form>
-                  )}
-
-                  {couponFeedback && (
-                    <p
-                      className={`mt-1.5 text-[0.68rem] ${
-                        couponFeedback.success ? "text-emerald-700" : "text-rose-600"
-                      }`}
-                    >
-                      {couponFeedback.message}
-                    </p>
-                  )}
-                </div>
 
                 {/* Pricing Summary (Server Recalculated) */}
                 <div className="mt-4 border-t border-wine-900/10 pt-4 space-y-2 text-xs">
