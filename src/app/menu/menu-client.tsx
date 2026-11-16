@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
-import { Search, SlidersHorizontal, Plus, Check, Clock, Sparkles, X, ArrowRight, Eye } from "lucide-react";
+import { Search, SlidersHorizontal, Plus, Check, Clock, Star, X, ArrowRight, Eye } from "lucide-react";
 import type { Category, Product } from "@/types/catalogue";
 import { formatKobo } from "@/types/catalogue";
 import { FoodImage } from "@/components/ui/food-image";
@@ -127,7 +127,7 @@ export function MenuClient({ initialCategories, initialProducts }: MenuClientPro
                     : "border-wine-900/20 bg-white text-wine-800 hover:border-wine-900/50"
                 )}
               >
-                <Sparkles className="size-3.5 text-champagne-500" />
+                <Star className="size-3.5 text-champagne-500" />
                 Featured Only
               </button>
 

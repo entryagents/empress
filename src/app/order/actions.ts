@@ -59,6 +59,38 @@ export async function submitCheckoutOrderAction(
       revalidatePath("/admin/orders");
       revalidatePath("/account/orders");
 
+      // Remember the delivery address for next time (skip if already saved)
+      const addr = checkoutInput.address;
+      if (userId && checkoutInput.fulfillment_type === "delivery" && addr?.street_address) {
+        try {
+          const { getCustomerAddresses, saveCustomerAddress } = await import("@/lib/customer/service");
+          const existing = await getCustomerAddresses(userId);
+          const norm = (s?: string | null) => (s || "").trim().toLowerCase();
+          const dup = existing.some(
+            (a) =>
+              norm(a.street_address) === norm(addr.street_address) &&
+              norm(a.area) === norm(addr.area) &&
+              norm(a.building_number) === norm(addr.building_number)
+          );
+          if (!dup) {
+            await saveCustomerAddress(userId, {
+              label: existing.length === 0 ? "Home" : `Address ${existing.length + 1}`,
+              state: addr.state,
+              city: addr.city,
+              area: addr.area,
+              street_address: addr.street_address,
+              building_number: addr.building_number || null,
+              landmark: addr.landmark || null,
+              delivery_instructions: addr.additional_instructions || null,
+              is_default: existing.length === 0,
+            });
+            revalidatePath("/account/addresses");
+          }
+        } catch (e) {
+          console.warn("Could not auto-save delivery address:", e);
+        }
+      }
+
       // Initialize Bachs hosted checkout session
       const { createBachsCheckoutSession } = await import("@/lib/payment/service");
       const paymentRes = await createBachsCheckoutSession(res.order);

@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Plus, Search, Eye, EyeOff, Trash2, Edit3, Sparkles, AlertCircle, CheckCircle2, UtensilsCrossed, Database } from "lucide-react";
+import { Plus, Search, Eye, EyeOff, Trash2, Edit3, Star, AlertCircle, CheckCircle2, UtensilsCrossed, Database } from "lucide-react";
 import type { Product, Category } from "@/types/catalogue";
 import { formatKobo } from "@/types/catalogue";
 import { toggleProductPublishAction, archiveProductAction, seedCatalogueServerAction } from "../actions";
@@ -221,7 +221,7 @@ export function AdminMenuListClient({ initialProducts, categories }: Props) {
                               <p className="font-serif text-sm font-semibold text-wine-950">{prod.name}</p>
                               {prod.is_featured && (
                                 <span title="Featured Dish" className="inline-flex items-center">
-                                  <Sparkles className="size-3 text-champagne-500 fill-champagne-500" />
+                                  <Star className="size-3 text-champagne-500 fill-champagne-500" />
                                 </span>
                               )}
                             </div>

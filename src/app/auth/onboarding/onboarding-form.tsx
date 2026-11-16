@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { User, Phone, AtSign, AlertCircle, Sparkles } from "lucide-react";
+import { User, Phone, AtSign, AlertCircle } from "lucide-react";
 import { completeGoogleOnboardingAction } from "../actions";
 
 interface OnboardingFormProps {
@@ -130,7 +130,6 @@ export function OnboardingForm({ initialEmail, initialName }: OnboardingFormProp
         disabled={isSubmitting}
         className="mt-6 flex w-full items-center justify-center gap-2 rounded bg-wine-900 py-3 text-xs font-semibold uppercase tracking-widest text-ivory-50 shadow-md hover:bg-wine-800 disabled:opacity-50 transition-colors"
       >
-        <Sparkles className="size-4 text-champagne-400" />
         {isSubmitting ? "Finalizing Account..." : "Complete & Continue"}
       </button>
     </form>

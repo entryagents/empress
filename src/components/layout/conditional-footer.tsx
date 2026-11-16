@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { Footer } from "./footer";
 
 // Authenticated dashboards where public marketing footer must be strictly excluded
-const EXCLUDED_PREFIXES = ["/account", "/admin", "/delivery", "/auth/onboarding"];
+const EXCLUDED_PREFIXES = ["/account", "/admin", "/delivery", "/auth", "/order"];
 
 export function ConditionalFooter() {
   const pathname = usePathname();

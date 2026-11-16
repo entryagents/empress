@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Save, Plus, Trash2, AlertCircle, Image as ImageIcon, Sparkles } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, AlertCircle, Image as ImageIcon } from "lucide-react";
 import type { Product, Category, ProductVariant, ProductAddonGroup, ProductImage } from "@/types/catalogue";
 import { koboToNaira, nairaToKobo } from "@/types/catalogue";
 import { saveProductAction } from "../actions";

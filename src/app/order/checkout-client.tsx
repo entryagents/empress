@@ -78,6 +78,51 @@ export function CheckoutClient({ deliveryZones, customer, savedAddresses = [] }:
   // Pickup State
   const [pickupInstructions, setPickupInstructions] = useState("");
 
+  // Persist checkout draft across reloads (per signed-in customer)
+  const draftKey = `empress-checkout-draft:${customer?.id || "guest"}`;
+  const [draftLoaded, setDraftLoaded] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d.fullName) setFullName(d.fullName);
+        if (d.phone) setPhone(d.phone);
+        if (d.kitchenNotes) setKitchenNotes(d.kitchenNotes);
+        if (d.selectedZoneId && deliveryZones.some((z) => z.id === d.selectedZoneId)) {
+          setSelectedZoneId(d.selectedZoneId);
+        }
+        if (d.streetAddress) setStreetAddress(d.streetAddress);
+        if (d.buildingNumber) setBuildingNumber(d.buildingNumber);
+        if (d.area) setArea(d.area);
+        if (d.landmark) setLandmark(d.landmark);
+        if (d.deliveryInstructions) setDeliveryInstructions(d.deliveryInstructions);
+        if (d.pickupInstructions) setPickupInstructions(d.pickupInstructions);
+      }
+    } catch {
+      // ignore corrupt draft
+    }
+    setDraftLoaded(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!draftLoaded) return;
+    try {
+      localStorage.setItem(
+        draftKey,
+        JSON.stringify({
+          fullName, phone, kitchenNotes, selectedZoneId, streetAddress,
+          buildingNumber, area, landmark, deliveryInstructions, pickupInstructions,
+        })
+      );
+    } catch {
+      // storage unavailable
+    }
+  }, [draftLoaded, draftKey, fullName, phone, kitchenNotes, selectedZoneId, streetAddress,
+      buildingNumber, area, landmark, deliveryInstructions, pickupInstructions]);
+
   // Coupon State
   const [couponCode, setCouponCode] = useState("");
   const [couponFeedback, setCouponFeedback] = useState<{ success: boolean; message: string } | null>(null);

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
-import { Maximize2, X, Sparkles } from "lucide-react";
+import { Maximize2, X } from "lucide-react";
 import { FoodImage } from "@/components/ui/food-image";
 import { ImageReveal, Reveal } from "@/components/ui/reveal";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -97,8 +97,7 @@ export function Gallery() {
           </SectionHeading>
 
           <span className="inline-flex items-center gap-1.5 text-xs text-wine-700">
-            <Sparkles className="size-3.5 text-champagne-500" />
-            Media Vault Active
+            Our Kitchen
           </span>
         </div>
 

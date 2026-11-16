@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Clock, ShieldAlert, Sparkles, Plus, Minus, Check, ShoppingBag, ArrowRight } from "lucide-react";
+import { ArrowLeft, Clock, ShieldAlert, Plus, Minus, Check, ShoppingBag, ArrowRight } from "lucide-react";
 import type { Product, ProductVariant, ProductAddon } from "@/types/catalogue";
 import { formatKobo, calculateItemPrice } from "@/types/catalogue";
 import { FoodImage } from "@/components/ui/food-image";

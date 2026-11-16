@@ -5,7 +5,6 @@ import {
   Building2,
   MapPin,
   Clock,
-  Sparkles,
   Save,
   Plus,
   Trash2,
@@ -185,7 +184,6 @@ export function SettingsClient({
                 : "bg-white text-wine-900 hover:bg-ivory-100 border border-wine-900/10"
             }`}
           >
-            <Sparkles className="size-3.5" />
             Homepage CMS
           </button>
         </div>

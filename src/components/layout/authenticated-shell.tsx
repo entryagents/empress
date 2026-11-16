@@ -6,7 +6,6 @@ import {
   UtensilsCrossed,
   Layers,
   ChefHat,
-  Sparkles,
   Settings,
   BarChart3,
   Star,
@@ -53,9 +52,9 @@ export function AuthenticatedShell({ role, children }: AuthenticatedShellProps) 
   const items = role === "admin" ? adminNav : role === "delivery_driver" ? courierNav : customerNav;
 
   return (
-    <div className="flex min-h-[90vh] bg-ivory-50 text-wine-950">
+    <div className="flex min-h-dvh bg-ivory-50 text-wine-950">
       {/* Desktop Persistent Sidebar */}
-      <aside className="hidden lg:flex w-64 flex-col border-r border-wine-900/10 bg-white shadow-soft pt-28 pb-8 px-4 shrink-0">
+      <aside className="hidden lg:flex w-64 flex-col border-r border-wine-900/10 bg-white shadow-soft pt-8 pb-8 px-4 shrink-0 sticky top-0 h-dvh self-start">
         <div className="px-3 pb-6 border-b border-wine-900/10">
           <p className="text-[0.65rem] font-bold uppercase tracking-widest text-champagne-600">
             {role === "admin" ? "Administrative Console" : role === "delivery_driver" ? "Dispatch Logistics" : "Customer Portal"}
@@ -98,7 +97,7 @@ export function AuthenticatedShell({ role, children }: AuthenticatedShellProps) 
       </aside>
 
       {/* Main Content Pane */}
-      <main className="flex-1 min-w-0 pb-24 lg:pb-12 pt-28 lg:pt-32 px-4 sm:px-6 lg:px-10">
+      <main className="flex-1 min-w-0 pb-24 lg:pb-12 pt-8 lg:pt-10 px-4 sm:px-6 lg:px-10">
         {children}
       </main>
 
