@@ -370,6 +370,18 @@ export function OrderConfirmationClient() {
                 </span>
               </div>
 
+              {order.fulfillment_type === "delivery" && (
+                <div className="pt-2">
+                  <a
+                    href={`/order/track?ref=${order.order_reference}&token=${order.secure_access_token}`}
+                    className="flex w-full items-center justify-center gap-2 rounded bg-wine-900 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-ivory-50 shadow-xs hover:bg-wine-800 transition-colors"
+                  >
+                    <span>Track Live Delivery GPS</span>
+                    <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+                  </a>
+                </div>
+              )}
+
               <div className="flex items-center justify-between">
                 <span className="text-wine-700">Customer Phone</span>
                 <span className="font-medium text-wine-950">{order.customer_phone}</span>

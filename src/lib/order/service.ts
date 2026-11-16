@@ -630,8 +630,8 @@ export async function getAdminOrders(limit = 50): Promise<Order[]> {
 export const VALID_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   received: ["confirmed", "awaiting_payment", "cancelled"],
   awaiting_payment: ["confirmed", "cancelled"],
-  confirmed: ["preparing", "cancelled"],
-  preparing: ["ready", "ready_for_pickup", "ready_for_dispatch", "cancelled"],
+  confirmed: ["preparing", "ready_for_dispatch", "out_for_delivery", "cancelled"],
+  preparing: ["ready", "ready_for_pickup", "ready_for_dispatch", "out_for_delivery", "cancelled"],
   ready: ["dispatched", "collected", "out_for_delivery", "delivered", "cancelled"],
   ready_for_pickup: ["collected", "cancelled"],
   ready_for_dispatch: ["out_for_delivery", "dispatched", "cancelled"],

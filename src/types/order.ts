@@ -177,6 +177,15 @@ export interface Order {
   payment_completed_at?: string | null;
   special_instructions?: string | null;
   admin_notes?: string | null;
+  assigned_driver_id?: string | null;
+  delivery_assigned_at?: string | null;
+  assigned_driver?: {
+    id: string;
+    full_name: string;
+    phone: string;
+    vehicle_type: string;
+    vehicle_plate_number?: string | null;
+  } | null;
   cancellation_reason?: string | null;
   cancelled_at?: string | null;
   cancelled_by?: string | null;

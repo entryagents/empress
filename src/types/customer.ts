@@ -1,6 +1,6 @@
 import type { Order } from "./order";
 
-export type UserRole = "customer" | "staff" | "admin";
+export type UserRole = "customer" | "staff" | "delivery_driver" | "admin";
 
 export interface CustomerProfile {
   id: string; // matches auth.users UUID
