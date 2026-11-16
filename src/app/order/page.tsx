@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { getDeliveryZones } from "@/lib/order/service";
 import { getCurrentCustomer, getCustomerAddresses } from "@/lib/customer/service";
 import { CheckoutClient } from "./checkout-client";
@@ -10,26 +11,27 @@ export const metadata = {
 export const instant = false;
 
 export default async function OrderPage() {
-  const [deliveryZones, { user, profile }] = await Promise.all([
-    getDeliveryZones(),
-    getCurrentCustomer(),
-  ]);
+  const { user, profile } = await getCurrentCustomer();
 
-  const savedAddresses = user ? await getCustomerAddresses(user.id) : [];
+  // Enforce customer authentication: Checkout requires login
+  if (!user) {
+    redirect("/auth/login?redirect=/order");
+  }
+
+  const [deliveryZones, savedAddresses] = await Promise.all([
+    getDeliveryZones(),
+    getCustomerAddresses(user.id),
+  ]);
 
   return (
     <CheckoutClient
       deliveryZones={deliveryZones}
-      customer={
-        user
-          ? {
-              id: user.id,
-              email: user.email,
-              fullName: profile?.full_name || "",
-              phone: profile?.phone || "",
-            }
-          : null
-      }
+      customer={{
+        id: user.id,
+        email: user.email,
+        fullName: profile?.full_name || "",
+        phone: profile?.phone || "",
+      }}
       savedAddresses={savedAddresses}
     />
   );

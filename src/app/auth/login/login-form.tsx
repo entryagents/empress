@@ -2,13 +2,17 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, Lock, Mail, AlertCircle, Sparkles } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, Lock, Mail, AlertCircle, ShoppingBag } from "lucide-react";
 import { customerLoginAction } from "../actions";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTarget = searchParams?.get("redirect") || "/account";
+  const isCheckoutRedirect = redirectTarget === "/order";
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -26,7 +30,7 @@ export function LoginForm() {
     try {
       const res = await customerLoginAction(formData);
       if (res.success) {
-        router.push("/account");
+        router.push(redirectTarget);
         router.refresh();
       } else {
         setErrorMsg(res.error || "Invalid email or password.");
@@ -48,6 +52,15 @@ export function LoginForm() {
           <ArrowLeft className="size-3.5" /> Return Home
         </Link>
 
+        {isCheckoutRedirect && (
+          <div className="mt-4 flex items-center gap-3 rounded border border-champagne-500/30 bg-champagne-500/10 p-3.5 text-xs text-wine-900">
+            <ShoppingBag className="size-4 shrink-0 text-champagne-700" />
+            <span>
+              Please <strong>sign in</strong> to continue to checkout and complete your order.
+            </span>
+          </div>
+        )}
+
         <div className="mt-4 rounded-[2px] border border-wine-900/10 bg-white p-8 shadow-soft">
           <div className="text-center">
             <span className="font-serif text-2xl font-bold tracking-widest text-champagne-600">
@@ -57,7 +70,9 @@ export function LoginForm() {
               Welcome Back
             </h1>
             <p className="mt-1 text-xs text-wine-800/80">
-              Sign in to manage your orders, saved addresses, and dining privileges.
+              {isCheckoutRedirect
+                ? "Sign in to place your order with verified Nigerian delivery and payment."
+                : "Sign in to manage your orders, saved addresses, and dining privileges."}
             </p>
           </div>
 
@@ -69,7 +84,10 @@ export function LoginForm() {
           )}
 
           <div className="mt-6">
-            <GoogleSignInButton label="Continue with Google" />
+            <GoogleSignInButton
+              label="Continue with Google"
+              callbackURL={`/auth/onboarding${redirectTarget ? `?redirect=${encodeURIComponent(redirectTarget)}` : ""}`}
+            />
             <div className="relative my-5">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-wine-900/10" />
@@ -137,7 +155,7 @@ export function LoginForm() {
           <div className="mt-6 border-t border-wine-900/10 pt-4 text-center text-xs text-wine-800">
             <span>Don&apos;t have an account yet? </span>
             <Link
-              href="/auth/signup"
+              href={`/auth/signup${redirectTarget ? `?redirect=${encodeURIComponent(redirectTarget)}` : ""}`}
               className="font-semibold text-champagne-700 hover:text-wine-950 hover:underline"
             >
               Create Account

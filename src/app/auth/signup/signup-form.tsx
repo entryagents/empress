@@ -2,13 +2,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Lock, Mail, User, Phone, AlertCircle, CheckCircle2 } from "lucide-react";
 import { customerSignUpAction } from "../actions";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 
 export function SignUpForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTarget = searchParams?.get("redirect") || "/account";
+
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -33,7 +36,7 @@ export function SignUpForm() {
       const res = await customerSignUpAction(formData);
       if (res.success) {
         if (res.hasSession) {
-          router.push("/account");
+          router.push(redirectTarget);
           router.refresh();
         } else {
           setSuccessMsg(res.message || "Account created! Please check your email for confirmation.");
@@ -64,7 +67,7 @@ export function SignUpForm() {
               EMPRESS
             </span>
             <h1 className="mt-2 font-serif text-3xl font-light text-wine-950">
-              Join Empress
+              Create an Account
             </h1>
             <p className="mt-1 text-xs text-wine-800/80">
               Enjoy express checkout, saved delivery addresses, and priority orders.
@@ -86,7 +89,10 @@ export function SignUpForm() {
           )}
 
           <div className="mt-6">
-            <GoogleSignInButton label="Sign up with Google" />
+            <GoogleSignInButton
+              label="Sign up with Google"
+              callbackURL={`/auth/onboarding${redirectTarget ? `?redirect=${encodeURIComponent(redirectTarget)}` : ""}`}
+            />
             <div className="relative my-5">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-wine-900/10" />
@@ -145,7 +151,7 @@ export function SignUpForm() {
                   required
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+234 803 123 4567"
+                  placeholder="0803 123 4567"
                   className="w-full rounded border border-wine-900/20 bg-ivory-50/50 pl-9 pr-3.5 py-2.5 text-sm text-wine-950 placeholder:text-wine-400 focus:border-champagne-500 focus:outline-none"
                 />
               </div>
@@ -153,7 +159,7 @@ export function SignUpForm() {
 
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-wine-900">
-                Password *
+                Password * (min 6 characters)
               </label>
               <div className="relative mt-1.5">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-wine-400" />
@@ -163,7 +169,7 @@ export function SignUpForm() {
                   minLength={6}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 6 characters"
+                  placeholder="••••••••"
                   className="w-full rounded border border-wine-900/20 bg-ivory-50/50 pl-9 pr-3.5 py-2.5 text-sm text-wine-950 placeholder:text-wine-400 focus:border-champagne-500 focus:outline-none"
                 />
               </div>
@@ -181,7 +187,7 @@ export function SignUpForm() {
           <div className="mt-6 border-t border-wine-900/10 pt-4 text-center text-xs text-wine-800">
             <span>Already have an account? </span>
             <Link
-              href="/auth/login"
+              href={`/auth/login${redirectTarget ? `?redirect=${encodeURIComponent(redirectTarget)}` : ""}`}
               className="font-semibold text-champagne-700 hover:text-wine-950 hover:underline"
             >
               Sign In

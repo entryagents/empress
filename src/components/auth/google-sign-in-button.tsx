@@ -4,7 +4,13 @@ import { useState } from "react";
 import { signIn } from "@/lib/auth/client";
 import { AlertCircle } from "lucide-react";
 
-export function GoogleSignInButton({ label = "Continue with Google" }: { label?: string }) {
+export function GoogleSignInButton({
+  label = "Continue with Google",
+  callbackURL = "/auth/onboarding",
+}: {
+  label?: string;
+  callbackURL?: string;
+}) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -14,7 +20,7 @@ export function GoogleSignInButton({ label = "Continue with Google" }: { label?:
     try {
       await signIn.social({
         provider: "google",
-        callbackURL: "/auth/onboarding",
+        callbackURL,
       });
     } catch (err: any) {
       setError(err.message || "Failed to initiate Google sign in.");

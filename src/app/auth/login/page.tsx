@@ -1,8 +1,8 @@
+import { Suspense } from "react";
 import { Metadata } from "next";
 import { LoginForm } from "./login-form";
 
 export const instant = false;
-
 
 export const metadata: Metadata = {
   title: "Sign In | Empress Delicacies",
@@ -10,5 +10,15 @@ export const metadata: Metadata = {
 };
 
 export default function LoginPage() {
-  return <LoginForm />;
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[85vh] items-center justify-center text-xs text-wine-700">
+          Loading sign in...
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
+  );
 }

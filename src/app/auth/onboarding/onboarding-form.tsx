@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { User, Phone, AtSign, AlertCircle, Sparkles } from "lucide-react";
 import { completeGoogleOnboardingAction } from "../actions";
 
@@ -12,6 +12,9 @@ interface OnboardingFormProps {
 
 export function OnboardingForm({ initialEmail, initialName }: OnboardingFormProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTarget = searchParams?.get("redirect") || "/account";
+
   const [fullName, setFullName] = useState(initialName || "");
   const [username, setUsername] = useState("");
   const [phone, setPhone] = useState("");
@@ -31,7 +34,7 @@ export function OnboardingForm({ initialEmail, initialName }: OnboardingFormProp
     try {
       const res = await completeGoogleOnboardingAction(formData);
       if (res.success) {
-        router.push("/account");
+        router.push(redirectTarget);
         router.refresh();
       } else {
         setErrorMsg(res.error || "Failed to complete onboarding.");
@@ -60,7 +63,7 @@ export function OnboardingForm({ initialEmail, initialName }: OnboardingFormProp
           type="email"
           disabled
           value={initialEmail}
-          className="mt-1.5 w-full rounded border border-wine-900/10 bg-ivory-100/70 px-3.5 py-2 text-xs text-wine-600 cursor-not-allowed"
+          className="mt-1.5 w-full rounded border border-wine-900/10 bg-ivory-100/50 px-3.5 py-2.5 text-sm text-wine-800/80 cursor-not-allowed"
         />
       </div>
 
@@ -83,21 +86,23 @@ export function OnboardingForm({ initialEmail, initialName }: OnboardingFormProp
 
       <div>
         <label className="block text-xs font-semibold uppercase tracking-wider text-wine-900">
-          Username *
+          Unique Username *
         </label>
         <div className="relative mt-1.5">
           <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-wine-400" />
           <input
             type="text"
             required
+            pattern="^[a-zA-Z0-9_]{3,20}$"
+            title="Username must be 3-20 alphanumeric characters or underscores"
             value={username}
             onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
-            placeholder="amina_bello"
+            placeholder="amina_b"
             className="w-full rounded border border-wine-900/20 bg-ivory-50/50 pl-9 pr-3.5 py-2.5 text-sm text-wine-950 placeholder:text-wine-400 focus:border-champagne-500 focus:outline-none"
           />
         </div>
-        <p className="mt-1 text-[0.7rem] text-wine-600">
-          Must be unique. Lowercase letters, numbers, and underscores only.
+        <p className="mt-1 text-[0.65rem] text-wine-600">
+          Your unique identifier for culinary orders and dining reservations.
         </p>
       </div>
 
@@ -112,22 +117,22 @@ export function OnboardingForm({ initialEmail, initialName }: OnboardingFormProp
             required
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            placeholder="0803 123 4567 or +234 803 123 4567"
+            placeholder="0803 123 4567"
             className="w-full rounded border border-wine-900/20 bg-ivory-50/50 pl-9 pr-3.5 py-2.5 text-sm text-wine-950 placeholder:text-wine-400 focus:border-champagne-500 focus:outline-none"
           />
         </div>
-        <p className="mt-1 text-[0.7rem] text-wine-600">
-          Required for courier coordination during delivery.
+        <p className="mt-1 text-[0.65rem] text-wine-600">
+          Required for rider dispatch coordination and SMS notifications.
         </p>
       </div>
 
       <button
         type="submit"
         disabled={isSubmitting}
-        className="mt-6 w-full flex items-center justify-center gap-2 rounded bg-wine-900 py-3 text-xs font-semibold uppercase tracking-widest text-ivory-50 shadow-md hover:bg-wine-800 disabled:opacity-50 transition-colors"
+        className="mt-6 flex w-full items-center justify-center gap-2 rounded bg-wine-900 py-3 text-xs font-semibold uppercase tracking-widest text-ivory-50 shadow-md hover:bg-wine-800 disabled:opacity-50 transition-colors"
       >
-        <Sparkles className="size-3.5 text-champagne-400" />
-        <span>{isSubmitting ? "Finalizing Profile..." : "Complete Setup & Continue"}</span>
+        <Sparkles className="size-4 text-champagne-400" />
+        {isSubmitting ? "Finalizing Account..." : "Complete & Continue"}
       </button>
     </form>
   );

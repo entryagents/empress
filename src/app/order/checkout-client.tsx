@@ -304,13 +304,9 @@ export function CheckoutClient({ deliveryZones, customer, savedAddresses = [] }:
                     <h2 className="font-serif text-lg font-medium text-wine-950">
                       1. Customer Information
                     </h2>
-                    {customer ? (
+                    {customer && (
                       <span className="rounded bg-champagne-500/15 px-2 py-0.5 text-[0.65rem] font-semibold text-champagne-800 border border-champagne-500/30">
                         Signed In: {customer.email}
-                      </span>
-                    ) : (
-                      <span className="text-[0.7rem] text-wine-600">
-                        Guest Checkout · <Link href="/auth/login" className="font-semibold text-champagne-700 hover:underline">Sign In</Link>
                       </span>
                     )}
                   </div>

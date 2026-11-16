@@ -11,16 +11,23 @@ export const metadata = {
 
 export const instant = false;
 
-async function OnboardingDataLoader() {
+interface Props {
+  searchParams?: Promise<{ redirect?: string }>;
+}
+
+async function OnboardingDataLoader({ searchParams }: Props) {
   await connection();
   const user = await getSessionUser();
+  const params = searchParams ? await searchParams : {};
+  const redirectTarget = params.redirect || "/account";
+
   if (!user) {
-    redirect("/auth/login");
+    redirect(`/auth/login${params.redirect ? `?redirect=${encodeURIComponent(params.redirect)}` : ""}`);
   }
 
-  // If onboarding already done, proceed to account
+  // If onboarding already done, proceed to destination
   if ((user as any).onboardingCompleted && (user as any).phone && (user as any).username) {
-    redirect("/account");
+    redirect(redirectTarget);
   }
 
   return (
@@ -31,7 +38,7 @@ async function OnboardingDataLoader() {
   );
 }
 
-export default function OnboardingPage() {
+export default function OnboardingPage({ searchParams }: Props) {
   return (
     <section className="min-h-[85vh] bg-ivory-100/60 pb-24 pt-36 text-wine-950 font-sans">
       <div className="container-x max-w-md">
@@ -55,7 +62,7 @@ export default function OnboardingPage() {
               </div>
             }
           >
-            <OnboardingDataLoader />
+            <OnboardingDataLoader searchParams={searchParams} />
           </Suspense>
         </div>
       </div>
