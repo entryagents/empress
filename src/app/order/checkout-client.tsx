@@ -91,13 +91,6 @@ export function CheckoutClient({ deliveryZones, customer, savedAddresses = [] }:
     totalKobo: 0,
   });
 
-  // Client idempotency key for this checkout attempt generated on client mount
-  const [idempotencyKey, setIdempotencyKey] = useState<string>("");
-
-  useEffect(() => {
-    setIdempotencyKey(`idem-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
-  }, []);
-
   // Transform cart context items to DTO
   const cartInputItems: CartItemInput[] = items.map((i) => ({
     productId: i.product.id || i.product.slug,
@@ -195,7 +188,7 @@ export function CheckoutClient({ deliveryZones, customer, savedAddresses = [] }:
       pickup_instructions: orderMode === "pickup" ? pickupInstructions || undefined : undefined,
       special_instructions: kitchenNotes || undefined,
       coupon_code: appliedCouponCode,
-      idempotency_key: idempotencyKey,
+      idempotency_key: `idem-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     };
 
     try {
@@ -206,7 +199,7 @@ export function CheckoutClient({ deliveryZones, customer, savedAddresses = [] }:
         
         // If Bachs hosted checkout URL is provided, redirect to Bachs checkout immediately
         if (res.checkoutUrl) {
-          window.location.href = res.checkoutUrl;
+          window.location.assign(res.checkoutUrl);
           return;
         }
 
