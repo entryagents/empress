@@ -41,6 +41,13 @@ export default function AdminLayout({
                 <Layers className="size-3.5 text-champagne-400" />
                 Categories
               </Link>
+              <Link
+                href="/admin/orders"
+                className="flex items-center gap-1.5 rounded px-3 py-1.5 transition-colors hover:bg-wine-900/60 hover:text-champagne-300"
+              >
+                <ChefHat className="size-3.5 text-champagne-400" />
+                Incoming Orders
+              </Link>
             </nav>
           </div>
 
@@ -72,8 +79,8 @@ export default function AdminLayout({
             <Link href="/admin/categories" className="py-1 hover:text-champagne-300">
               Categories
             </Link>
-            <Link href="/admin/categories/new" className="py-1 hover:text-champagne-300">
-              + Category
+            <Link href="/admin/orders" className="py-1 hover:text-champagne-300">
+              Orders
             </Link>
             <Link href="/menu" target="_blank" className="py-1 hover:text-champagne-300">
               Preview

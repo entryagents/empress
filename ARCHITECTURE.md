@@ -1,14 +1,14 @@
 # EMPRESS DELICACIES — ARCHITECTURE DOCUMENTATION
 
-**Document Version:** 2.0 (Phase 3 Catalogue & Product Management)  
-**System Classification:** Food-Tech E-Commerce & Catalogue Management Platform  
+**Document Version:** 3.0 (Phase 4 Cart, Checkout, Delivery & Order Architecture)  
+**System Classification:** Food-Tech E-Commerce, Order Lifecycle & Catalogue Platform  
 **Target Deployment:** Vercel Serverless & Edge Network + Supabase PostgreSQL  
 
 ---
 
 ## 1. System Overview
 
-Empress Delicacies is a commercial-grade food ordering platform crafted with an editorial luxury visual identity. The system provides customer-facing menu exploration, customized dish ordering, and administrative inventory and catalogue governance.
+Empress Delicacies is a commercial-grade food ordering platform crafted with an editorial luxury visual identity. The system provides customer-facing menu exploration, customized dish ordering, Nigerian delivery routing, and administrative order intake and catalogue governance.
 
 ---
 
@@ -28,57 +28,58 @@ Empress Delicacies is a commercial-grade food ordering platform crafted with an 
 
 ## 3. Data Model & PostgreSQL Schema
 
-All catalogue tables are defined in `supabase/migrations/20261115_catalogue_schema.sql`.
+All database tables are versioned in `supabase/migrations/`:
+- `20261115_catalogue_schema.sql`: Categories, Products, Images, Variants, Add-on Groups, Add-ons.
+- `20261116_orders_checkout_schema.sql`: Orders, Order Items, Order Item Add-ons, Coupons, Delivery Zones.
 
 ```
-           +--------------------+
-           |     categories     |
-           +--------------------+
-                     | 1
-                     |
-                     | *
-           +--------------------+
-           |      products      |
-           +--------------------+
-           /         |          \
-          / 1        | 1         \ 1
-         /           |            \
-        *            *             *
-+---------------+ +------------------+ +-----------------------+
-|product_images | | product_variants | |  product_addon_groups |
-+---------------+ +------------------+ +-----------------------+
-                                                   | 1
-                                                   |
-                                                   | *
-                                       +-----------------------+
-                                       |    product_addons     |
-                                       +-----------------------+
+       +--------------------+
+       |   delivery_zones   |
+       +--------------------+
+                 | 1
+                 |
+                 | *
+       +--------------------+          +--------------------+
+       |       orders       | -------- |      coupons       |
+       +--------------------+ 1      * +--------------------+
+                 | 1
+                 |
+                 | *
+       +--------------------+
+       |    order_items     | (Immutable Historical Snapshots)
+       +--------------------+
+                 | 1
+                 |
+                 | *
+       +--------------------+
+       |  order_item_addons |
+       +--------------------+
 ```
 
 ### Monetary Conventions
 - **Integer Minor Units:** All monetary amounts are stored as integer `bigint` kobo in PostgreSQL and `number` in TypeScript (`100 kobo = 1 NGN`).
-- Zero floating-point decimals prevent rounding discrepancies across line items, quantity multipliers, and tax calculations.
+- Zero floating-point decimals prevent rounding discrepancies across line items, quantity multipliers, delivery fees, and coupons.
 - Display helpers: `formatKobo(kobo, currency = "NGN")` formats integers into localized currency strings (e.g. `₦4,500`).
 
 ---
 
-## 4. Data Access Layer (DAL) Architecture
+## 4. Checkout & Order Lifecycle Pipeline
 
-The application abstracts database communication through `src/lib/catalogue/service.ts`:
-1. **Supabase Integration:** Uses `@supabase/supabase-js` clients:
-   - `getSupabaseServerClient()`: Authenticated server client for reading public data under RLS.
-   - `getSupabaseAdminClient()`: Service role client for administrative mutations and schema seeding.
-2. **Resilient In-Memory Fallback:** When database environment variables are unset (or during initial local testing), the service seamlessly operates on an in-memory runtime store initialized from canonical seed data (`SEED_CATEGORIES`, `SEED_PRODUCTS`).
-3. **Data Integrity Guards:**
-   - Soft-delete deletion protection (`archiveCategory` blocks archiving if active dishes belong to the category).
-   - Non-destructive dish archiving (`is_archived = true`) protects historical order bags.
+When checkout is submitted:
+1. **Server-Side Validation:** The server reads active dishes from the catalogue service, verifies product availability, validates portion variants and add-on selections, and calculates the exact subtotal.
+2. **Delivery Eligibility & Fee:** The customer's zone is checked against configured delivery zones in Lagos. If `pickup` is selected, delivery fees are forced to 0.
+3. **Discount Engine:** The server validates coupon codes, expiry dates, and minimum order requirements, capping discounts at order subtotal.
+4. **Idempotency Key:** If an identical client idempotency key is submitted twice within a retry window, the existing order reference is returned safely without duplicate database records.
+5. **Immutable Snapshot Creation:** Item names, SKUs, images, portion names, unit prices, and applied extras are captured permanently in `order_items` and `order_item_addons`. Future catalogue changes never mutate historical orders.
+6. **Order Reservation:** Order status is set to `received`, and payment status is initialized to `unpaid`.
 
 ---
 
 ## 5. Security & Access Control
 
+- **Anti-Tampering:** Totals submitted by the client are strictly ignored; all monetary totals are computed server-side.
+- **Unguessable Access Tokens:** Guest orders are assigned high-entropy tokens (`crypto.randomBytes(24)`). Customers retrieve order records via token or verified phone number match, preventing sequential ID enumeration and IDOR vulnerabilities.
 - **Row Level Security (RLS):**
-  - Public `SELECT` allowed on `categories` and `products` where `is_archived = false` and `is_published = true`.
-  - Public `SELECT` allowed on `product_images`, `product_variants`, `product_addon_groups`, and `product_addons` linked to active products.
-  - Admin `ALL` (INSERT, UPDATE, DELETE) restricted to authenticated service roles.
-- **Image Safety:** 100% authentic photography licensed under CC0 / CC BY / CC BY-SA with full photographer credits. Zero unverified external assets or AI artifacts.
+  - Public `SELECT` allowed on active delivery zones and coupons.
+  - Customers can read only their own orders via verified session or access token.
+  - Admin operations restricted to authenticated service roles.

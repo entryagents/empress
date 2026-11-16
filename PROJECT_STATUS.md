@@ -1,7 +1,10 @@
 # EMPRESS DELICACIES — PROJECT STATUS
 
-**Last Updated:** November 15, 2026  
-**Milestones Completed:** Phase 1 (Visual Foundation & Homepage) & Phase 3 (Dynamic Menu, Product Catalogue & Product Management)  
+**Last Updated:** November 16, 2026  
+**Milestones Completed:**
+- Phase 1: Visual Foundation, Brand Identity & Public Homepage
+- Phase 3: Dynamic Menu, Product Catalogue & Product Management
+- Phase 4: Shopping Cart, Checkout, Nigerian Delivery & Order Creation  
 **Status:** Complete, Tested, and Deployed to Vercel  
 **Live Production URL:** https://empress-rosy.vercel.app  
 **Secondary Production Alias:** https://entry-agents-vwhehj-6617s-projects.vercel.app  
@@ -10,44 +13,54 @@
 
 ## 1. Executive Summary
 
-Empress Delicacies is a food-tech platform engineered to deliver authentic Nigerian small chops, handcrafted shawarma, wok-tossed noodles, slow-roasted grills, whole charcoal-grilled tilapia, and street specialties for express delivery and customer pickup.
+Empress Delicacies is a commercial-grade food-tech platform engineered to deliver authentic Nigerian small chops, handcrafted shawarma, wok-tossed noodles, slow-roasted grills, whole charcoal-grilled tilapia, and street specialties for express delivery and customer pickup.
 
-In Phase 3, the application transformed from static mock items into a complete, database-driven product catalogue and administrative management system backed by Supabase PostgreSQL and an in-memory resilient Data Access Layer (DAL).
+In Phase 4, the platform achieved a complete, secure shopping cart and checkout architecture:
+- Server-side price recalculation and integrity validation (100% immune to browser-side price manipulation).
+- Purpose-built Nigerian delivery address collection (State, City, Serviceable Area/Zone, Street Address, Building/House Number, and Prominent Landmarks).
+- Delivery fee calculation based on configurable delivery zones across Lagos (Victoria Island, Ikoyi, Lekki Phase 1, Chevron/VGC, Yaba/Surulere, and Ikeja GRA).
+- Pickup fulfilment at Empress Delicacies Central Kitchen Studio with zero delivery charges.
+- Discount coupon foundation supporting percentage and fixed discounts, minimum subtotal thresholds, and max discount caps.
+- Idempotent order creation preventing duplicate submissions during network retries.
+- Immutable order snapshots preserving historical item, variation, and add-on pricing.
+- Secure customer order lookup via unguessable access tokens and phone number verification.
+- Incoming orders feed in the administrative portal (`/admin/orders`).
 
 ---
 
-## 2. Phase 3 Architecture & Implemented Capabilities
+## 2. Phase 4 Implemented Features & Architecture
 
-### A. Database Architecture (`supabase/migrations/20261115_catalogue_schema.sql`)
+### A. Database Architecture (`supabase/migrations/20261116_orders_checkout_schema.sql`)
 - **Normalized Tables:**
-  - `categories`: Unique slug, name, editorial description, photography URL, display order, soft-delete archive flag (`is_archived`), and publication status (`is_published`).
-  - `products`: Category reference, SKU, slug, short & full descriptions, integer minor unit pricing (`base_price_kobo`), preparation time boundaries (`min_prep_time_minutes`, `max_prep_time_minutes`), availability status, and dietary/allergen tags.
-  - `product_images`: Multi-photo support per dish with primary image designation and ordering.
-  - `product_variants`: Portion sizing and bundle options (e.g., Single, Double, Jumbo) with price adjustments in integer kobo.
-  - `product_addon_groups` & `product_addons`: Customization groups (e.g., "Protein Choice", "Add Extra Cheese") with min/max selection validation and integer kobo add-on pricing.
-- **Data Integrity & Security:**
-  - Foreign key constraints with cascading deletes for variants and add-on items.
-  - Row Level Security (RLS) policies: Public read access for active published items; authenticated admin write access for catalogue mutations.
-  - Soft-delete deletion protection ensuring historical order integrity.
+  - `orders`: Human-friendly order reference (`EMP-YYYYMMDD-XXXX`), high-entropy `secure_access_token`, customer contact info, fulfillment type (`delivery` vs. `pickup`), Nigerian address fields, landmark, integer kobo financials (`subtotal_kobo`, `delivery_fee_kobo`, `discount_kobo`, `total_kobo`), order status (`received`, `confirmed`, `preparing`, etc.), payment status (`unpaid`, `paid`), and `idempotency_key`.
+  - `order_items`: Immutable snapshots of purchased dishes, SKUs, category names, chosen portion variant names, base prices, add-on totals, unit prices, quantities, and item totals in kobo.
+  - `order_item_addons`: Snapshot of each applied culinary extra with its price at the time of purchase.
+  - `coupons`: Privilege discount codes (`percentage` or `fixed`), minimum order amounts, max discount limits, and usage tracking.
+  - `delivery_zones`: Serviceable Lagos zones with areas list, fee in integer kobo, and estimated transit times.
+- **Security & RLS:**
+  - Row Level Security (RLS) enabled on all order and coupon tables.
+  - Customer order access protected via token or verified contact credentials (prevents IDOR and enumeration attacks).
+  - Admin mutations restricted to authenticated service roles.
 
-### B. Resilient Data Access Layer (`src/lib/catalogue/service.ts`)
-- Dual-tier architecture querying Supabase PostgreSQL when credentials exist, while maintaining an active in-memory runtime store seeded with canonical data.
-- Deletion guard preventing category archiving if active dishes belong to that category.
-- Strict monetary operations enforcing integer kobo (`100 kobo = 1 NGN`) with zero floating-point rounding errors.
+### B. Reliable Order Service (`src/lib/order/service.ts`)
+- **Server-Side Cart Validation:** Re-queries active dishes, portion variants, and add-ons from PostgreSQL / runtime store. Detects deleted, unpublished, or sold-out dishes, and recalculates 100% of totals on the server.
+- **Idempotency Engine:** Detects repeated submissions with identical client keys and returns the existing order reference without creating duplicate records.
+- **Immutable Snapshots:** Guarantees that future catalogue edits or price updates do not retroactively alter completed order bags.
 
-### C. Public Menu Browsing Experience (`/menu` & `/menu/[slug]`)
-- **Catalogue Explorer (`/menu`):** Responsive category pill filters, real-time client-side search by title or ingredients, sorting (display order, price low-to-high, price high-to-low, name), availability indicators, and instant Add-to-Bag actions.
-- **Product Detail Configurator (`/menu/[slug]`):** Multi-image gallery with thumbnail switcher, portion selector updating unit pricing, add-on checkboxes with selection constraints, special kitchen instructions textarea, quantity stepper, and dynamic OpenGraph metadata.
+### C. Polished Checkout Experience (`src/app/order/page.tsx` & `checkout-client.tsx`)
+- **Customer Information:** Full name, email for confirmation receipts, and Nigerian phone number.
+- **Nigerian Delivery Form:** Selectable delivery zones, area/neighbourhood, street address, optional building/flat number, prominent landmark field, and rider gate instructions.
+- **Pickup Option:** Central Kitchen Studio address, operating hours, phone, and customer collection instructions with zero delivery charges.
+- **Privilege Coupon Input:** Real-time server-side validation with instant feedback (e.g. `WELCOME10`, `EMPRESS500`, `VIPFEAST`).
+- **Live Summary & Revalidation:** Subtotal, delivery fee, privilege discount, and final calculated total.
 
-### D. Administrative Management Portal (`/admin/menu` & `/admin/categories`)
-- **Dish Manager (`/admin/menu`):** Full table view of dishes with SKU, category, base price, variation count, add-on count, prep time, publication toggle, edit link, and archive action. Includes a database sync trigger.
-- **Dish Creation & Editor (`/admin/menu/new`, `/admin/menu/[id]`):** Comprehensive editor for title, slug, SKU, category, short & full descriptions, base price in Naira, prep times, availability, multi-photo manager, portion variations editor, and add-on group configurator.
-- **Category Manager (`/admin/categories`, `/admin/categories/new`, `/admin/categories/[id]`):** Category sequence reordering, descriptions, image URL management, publication toggles, and deletion safety guards.
+### D. Order Confirmation & Secure Lookup (`/order/confirmation`)
+- Dedicated confirmation page displaying the reserved order reference, fulfillment method, address/pickup instructions, itemized snapshots, and explicit payment notice (`Order RECEIVED · Payment UNPAID`).
+- Secure order retrieval by reference and access token or customer phone number.
 
-### E. Upgraded Cart & Ordering Flow
-- **Cart Context V2 (`src/lib/cart-context.tsx`):** Tracks line items with custom composite keys (`${product.slug}-${variant}-${addons}-${instructions}`) and accurate integer kobo subtotals.
-- **Cart Drawer (`src/components/layout/cart-drawer.tsx`):** Rich line-item display showing portion names, add-on badges, special notes, and accurate Naira pricing.
-- **Order Page (`src/app/order/page.tsx`):** Order breakdown with itemized portion and extras calculations.
+### E. Administrative Intake (`/admin/orders`)
+- Live incoming order board displaying reference, customer info, fulfillment method, items summary, integer kobo total, order status, and payment state.
+- Direct links to review individual order confirmation records.
 
 ---
 
@@ -66,14 +79,21 @@ In Phase 3, the application transformed from static mock items into a complete, 
 
 ## 4. Verification & Testing
 
-- **Unit & Logic Tests (`scripts/test-catalogue.mjs`):** Passed 100% of assertions (monetary conversion, price calculations with variants + add-ons, slug lookups, category deletion protection).
+- **Unit & Logic Tests (`scripts/test-checkout.ts`):** 100% passed:
+  - Delivery zones configuration & fees.
+  - Percentage & fixed coupon validation with minimum order thresholds.
+  - Server-side cart validation & accurate kobo arithmetic.
+  - Idempotency & duplicate submission prevention.
+  - Nigerian delivery address capture & landmark preservation.
+  - Secure customer order lookup (unauthorized token/phone lookups rejected).
+- **Catalogue Test Suite (`scripts/test-catalogue.mjs`):** 100% passed.
 - **TypeScript Static Analysis (`npx tsc --noEmit`):** 0 errors.
-- **Production Build (`npm run build`):** All 40 pages compiled and prerendered cleanly.
-- **Live Vercel Deployment:** Verified live and returning HTTP 200 at `https://empress-rosy.vercel.app/menu`.
+- **Production Build (`npm run build`):** Clean static page generation across all 42 routes.
+- **Live Production Deployment:** Deployed to Vercel at `https://empress-rosy.vercel.app`.
 
 ---
 
-## 5. Next Steps (Subsequent Phases)
+## 5. Next Steps (Upcoming Phases)
 
-- **Phase 4:** Live customer authentication, account profile, order history, and Bach's Payment API integration.
-- **Phase 5:** Live kitchen display system (KDS) order board and driver pickup dispatch tracking.
+- **Phase 5 (Prompt 05):** Bach's Payment API integration (card checkout, virtual account generation, webhook verification, and payment status updates).
+- **Phase 6:** Live kitchen display system (KDS) and delivery rider dispatch management.
