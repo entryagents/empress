@@ -1,5 +1,6 @@
 import type {
   Order,
+  OrderStatus,
   OrderItemSnapshot,
   CartItemInput,
   CustomerCheckoutInput,
@@ -621,6 +622,260 @@ export async function getAdminOrders(limit = 50): Promise<Order[]> {
   }
 
   return runtimeOrders.slice(0, limit);
+}
+
+/**
+ * Valid status transitions matrix for culinary fulfillment
+ */
+export const VALID_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  received: ["confirmed", "awaiting_payment", "cancelled"],
+  awaiting_payment: ["confirmed", "cancelled"],
+  confirmed: ["preparing", "cancelled"],
+  preparing: ["ready", "ready_for_pickup", "ready_for_dispatch", "cancelled"],
+  ready: ["dispatched", "collected", "out_for_delivery", "delivered", "cancelled"],
+  ready_for_pickup: ["collected", "cancelled"],
+  ready_for_dispatch: ["out_for_delivery", "dispatched", "cancelled"],
+  out_for_delivery: ["delivered", "cancelled"],
+  dispatched: ["delivered", "cancelled"],
+  delivered: [], // Terminal fulfillment status
+  collected: [], // Terminal fulfillment status
+  cancelled: [], // Terminal fulfillment status
+};
+
+/**
+ * Validate whether a requested status transition is allowable
+ */
+export function isValidStatusTransition(currentStatus: OrderStatus, newStatus: OrderStatus): boolean {
+  if (currentStatus === newStatus) return true;
+  const allowed = VALID_STATUS_TRANSITIONS[currentStatus];
+  return allowed ? allowed.includes(newStatus) : false;
+}
+
+/**
+ * Update an order's fulfillment status with audit logging and optional customer notification
+ */
+export async function updateAdminOrderStatus(params: {
+  orderReference: string;
+  newStatus: OrderStatus;
+  changedByUserId?: string | null;
+  changedByName?: string | null;
+  notes?: string | null;
+  cancellationReason?: string | null;
+}): Promise<{ success: boolean; error?: string; order?: Order }> {
+  const cleanRef = params.orderReference.trim().toUpperCase();
+  const order = await getOrderByReferenceAndToken(cleanRef);
+
+  if (!order) {
+    return { success: false, error: "Order not found." };
+  }
+
+  // Enforce workflow validation rules
+  if (!isValidStatusTransition(order.status, params.newStatus)) {
+    return {
+      success: false,
+      error: `Invalid status transition: cannot move order from '${order.status}' to '${params.newStatus}'.`,
+    };
+  }
+
+  // If moving to confirmed or preparing, verify payment is not explicitly failed
+  if (
+    (params.newStatus === "confirmed" || params.newStatus === "preparing") &&
+    order.payment_status === "failed"
+  ) {
+    return {
+      success: false,
+      error: "Cannot confirm or prepare an order with a 'failed' payment status.",
+    };
+  }
+
+  const now = new Date().toISOString();
+  const updatePayload: Record<string, unknown> = {
+    status: params.newStatus,
+    updated_at: now,
+  };
+
+  if (params.newStatus === "cancelled") {
+    updatePayload.cancellation_reason = params.cancellationReason || "Cancelled by kitchen administration.";
+    updatePayload.cancelled_at = now;
+    updatePayload.cancelled_by = params.changedByName || "Staff";
+  }
+
+  const admin = getSupabaseAdminClient();
+  if (admin) {
+    try {
+      await admin.from("orders").update(updatePayload).eq("order_reference", cleanRef);
+
+      // Record audit timeline entry
+      await admin.from("order_status_history").insert({
+        order_id: order.id,
+        order_reference: cleanRef,
+        from_status: order.status,
+        to_status: params.newStatus,
+        changed_by_user_id: params.changedByUserId || null,
+        changed_by_name: params.changedByName || "Staff Administrator",
+        notes: params.notes || (params.newStatus === "cancelled" ? params.cancellationReason : null),
+        created_at: now,
+      });
+    } catch (e) {
+      console.warn("Could not write order update to Supabase, updating memory:", e);
+    }
+  }
+
+  // Update in runtime memory
+  order.status = params.newStatus;
+  order.updated_at = now;
+  if (params.newStatus === "cancelled") {
+    order.cancellation_reason = params.cancellationReason || "Cancelled by kitchen administration.";
+    order.cancelled_at = now;
+    order.cancelled_by = params.changedByName || "Staff";
+  }
+
+  const historyEntry = {
+    id: `hist-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    order_id: order.id,
+    order_reference: cleanRef,
+    from_status: order.status,
+    to_status: params.newStatus,
+    changed_by_user_id: params.changedByUserId || null,
+    changed_by_name: params.changedByName || "Staff Administrator",
+    notes: params.notes || null,
+    created_at: now,
+  };
+
+  if (!order.timeline) order.timeline = [];
+  order.timeline.unshift(historyEntry);
+
+  // Send customer notification via notification abstraction
+  try {
+    const { buildNotificationTemplate, sendOrderNotification } = await import("./notifications");
+    const notif = buildNotificationTemplate(order, params.newStatus);
+    await sendOrderNotification(notif);
+  } catch (e) {
+    console.warn("Notification dispatch notice:", e);
+  }
+
+  return { success: true, order };
+}
+
+/**
+ * Update internal administrator notes on an order
+ */
+export async function updateAdminOrderNotes(
+  orderReference: string,
+  adminNotes: string
+): Promise<{ success: boolean; error?: string }> {
+  const cleanRef = orderReference.trim().toUpperCase();
+  const now = new Date().toISOString();
+
+  const admin = getSupabaseAdminClient();
+  if (admin) {
+    try {
+      await admin
+        .from("orders")
+        .update({ admin_notes: adminNotes, updated_at: now })
+        .eq("order_reference", cleanRef);
+    } catch (e) {
+      console.warn("Could not save admin notes to Supabase:", e);
+    }
+  }
+
+  const found = runtimeOrders.find((o) => o.order_reference.toUpperCase() === cleanRef);
+  if (found) {
+    found.admin_notes = adminNotes;
+    found.updated_at = now;
+  }
+
+  return { success: true };
+}
+
+/**
+ * Fetch full order status audit timeline
+ */
+export async function getOrderStatusHistory(orderReference: string): Promise<any[]> {
+  const cleanRef = orderReference.trim().toUpperCase();
+  const admin = getSupabaseAdminClient();
+
+  if (admin) {
+    try {
+      const { data, error } = await admin
+        .from("order_status_history")
+        .select("*")
+        .eq("order_reference", cleanRef)
+        .order("created_at", { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        return data;
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  const found = runtimeOrders.find((o) => o.order_reference.toUpperCase() === cleanRef);
+  return found?.timeline || [];
+}
+
+/**
+ * Compute real-time Order Management Metrics from database
+ * Revenue is strictly calculated from verified payments (payment_status = 'paid')
+ */
+export async function getOrderAdminMetrics(): Promise<import("@/types/order").OrderAdminMetrics> {
+  const orders = await getAdminOrders(250);
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  let ordersReceivedToday = 0;
+  let pendingOrders = 0;
+  let paidOrders = 0;
+  let preparingOrders = 0;
+  let outForDeliveryOrders = 0;
+  let completedOrders = 0;
+  let cancelledOrders = 0;
+  let verifiedRevenueKobo = 0;
+
+  for (const o of orders) {
+    if (o.created_at && o.created_at.slice(0, 10) === todayStr) {
+      ordersReceivedToday++;
+    }
+
+    if (o.status === "received" || o.status === "awaiting_payment" || o.status === "confirmed") {
+      pendingOrders++;
+    }
+
+    if (o.payment_status === "paid") {
+      paidOrders++;
+      // Only count revenue from paid orders that are NOT cancelled
+      if (o.status !== "cancelled") {
+        verifiedRevenueKobo += o.total_kobo || 0;
+      }
+    }
+
+    if (o.status === "preparing") {
+      preparingOrders++;
+    }
+
+    if (o.status === "out_for_delivery" || o.status === "dispatched") {
+      outForDeliveryOrders++;
+    }
+
+    if (o.status === "delivered" || o.status === "collected") {
+      completedOrders++;
+    }
+
+    if (o.status === "cancelled") {
+      cancelledOrders++;
+    }
+  }
+
+  return {
+    ordersReceivedToday,
+    pendingOrders,
+    paidOrders,
+    preparingOrders,
+    outForDeliveryOrders,
+    completedOrders,
+    cancelledOrders,
+    verifiedRevenueKobo,
+  };
 }
 
 /**

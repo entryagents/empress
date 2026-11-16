@@ -3,14 +3,18 @@ import type { Product, ProductVariant, ProductAddon } from "./catalogue";
 export type FulfillmentType = "delivery" | "pickup";
 
 export type OrderStatus =
-  | "received"
-  | "confirmed"
-  | "preparing"
-  | "ready"
-  | "dispatched"
-  | "delivered"
-  | "collected"
-  | "cancelled";
+  | "received"           // Placed by customer (awaiting payment or review)
+  | "awaiting_payment"   // Explicit awaiting payment
+  | "confirmed"          // Payment confirmed or accepted by kitchen
+  | "preparing"          // Food in kitchen / culinary preparation
+  | "ready"              // Ready for pickup or dispatch
+  | "ready_for_pickup"   // Ready for customer pickup
+  | "ready_for_dispatch" // Packaged for rider
+  | "out_for_delivery"   // In transit with delivery driver
+  | "dispatched"         // Dispatched
+  | "delivered"          // Safely delivered to recipient
+  | "collected"          // Collected by customer
+  | "cancelled";         // Cancelled
 
 export type PaymentStatus =
   | "unpaid"
@@ -172,8 +176,36 @@ export interface Order {
   bachs_checkout_url?: string | null;
   payment_completed_at?: string | null;
   special_instructions?: string | null;
+  admin_notes?: string | null;
+  cancellation_reason?: string | null;
+  cancelled_at?: string | null;
+  cancelled_by?: string | null;
   idempotency_key?: string | null;
   created_at: string;
   updated_at: string;
   items?: OrderItemSnapshot[];
+  timeline?: OrderStatusHistoryEntry[];
+}
+
+export interface OrderStatusHistoryEntry {
+  id: string;
+  order_id: string;
+  order_reference: string;
+  from_status: string;
+  to_status: string;
+  changed_by_user_id?: string | null;
+  changed_by_name?: string | null;
+  notes?: string | null;
+  created_at: string;
+}
+
+export interface OrderAdminMetrics {
+  ordersReceivedToday: number;
+  pendingOrders: number;
+  paidOrders: number;
+  preparingOrders: number;
+  outForDeliveryOrders: number;
+  completedOrders: number;
+  cancelledOrders: number;
+  verifiedRevenueKobo: number; // Strictly from orders where payment_status = 'paid'
 }
