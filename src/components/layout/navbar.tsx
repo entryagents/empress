@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { Menu, ShoppingBag, X, ArrowUpRight, User } from "lucide-react";
 import { navLinks, ROUTES } from "@/config/site";
@@ -13,6 +14,8 @@ import { cn } from "@/lib/utils";
 const ease = [0.22, 1, 0.36, 1] as const;
 
 export function Navbar() {
+  const pathname = usePathname();
+  const isHome = pathname === "/";
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const { totalCount, openCart } = useCart();
@@ -44,7 +47,7 @@ export function Navbar() {
         transition={{ duration: 0.9, ease }}
         className={cn(
           "fixed inset-x-0 top-0 z-40 transition-colors duration-500",
-          scrolled || open ? "bg-wine-950/95 shadow-soft backdrop-blur-sm" : "bg-transparent",
+          !isHome || scrolled || open ? "bg-wine-950/95 shadow-soft backdrop-blur-sm" : "bg-transparent",
           "text-ivory-50",
         )}
       >
