@@ -630,7 +630,11 @@ export async function getAdminOrders(limit = 50): Promise<Order[]> {
         LIMIT ${limit};
       `;
       if (rows && rows.length > 0) {
-        return rows as Order[];
+        return rows.map((r: any) => ({
+          ...r,
+          created_at: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+          updated_at: r.updated_at ? new Date(r.updated_at).toISOString() : new Date().toISOString(),
+        })) as Order[];
       }
     } catch (e) {
       console.warn("Neon getAdminOrders notice, falling back:", e);
@@ -858,7 +862,15 @@ export async function getOrderAdminMetrics(): Promise<import("@/types/order").Or
   let verifiedRevenueKobo = 0;
 
   for (const o of orders) {
-    if (o.created_at && o.created_at.slice(0, 10) === todayStr) {
+    const createdStr = o.created_at
+      ? typeof o.created_at === "string"
+        ? o.created_at
+        : (o.created_at as any) instanceof Date
+        ? (o.created_at as any).toISOString()
+        : String(o.created_at)
+      : "";
+
+    if (createdStr && createdStr.slice(0, 10) === todayStr) {
       ordersReceivedToday++;
     }
 

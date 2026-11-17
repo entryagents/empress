@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { PlusCircle, ExternalLink } from "lucide-react";
 import { AuthenticatedShell } from "@/components/layout/authenticated-shell";
+import { getCurrentCustomer } from "@/lib/customer/service";
 
 export const metadata = {
   title: "Admin Portal | Empress Delicacies",
@@ -9,11 +11,22 @@ export const metadata = {
 
 export const instant = false;
 
-export default function AdminLayout({
+export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { user, profile } = await getCurrentCustomer();
+
+  if (!user) {
+    redirect("/auth/login?redirect=/admin/orders");
+  }
+
+  // Verify administrative privileges
+  if (profile?.role !== "admin") {
+    redirect("/account");
+  }
+
   return (
     <AuthenticatedShell role="admin">
       <div className="w-full">
