@@ -502,6 +502,67 @@ async function logWebhookEvent(
 }
 
 /**
+ * Active synchronisation with Bachs API for pending checkout sessions
+ */
+export async function syncOrderPaymentWithBachs(order: Order): Promise<Order> {
+  if (order.payment_status === "paid" || !order.bachs_checkout_id || !isBachsConfigured()) {
+    return order;
+  }
+
+  try {
+    const bachs = getBachsClient();
+    const session = await bachs.checkoutSessions.get(order.bachs_checkout_id);
+
+    if (session) {
+      // Check session status or payment_status from Bachs
+      const sessionStatus = (session.status || "").toLowerCase();
+      const paymentStatus = (session.payment_status || "").toLowerCase();
+
+      const isCompleted =
+        sessionStatus === "completed" ||
+        sessionStatus === "succeeded" ||
+        paymentStatus === "paid" ||
+        paymentStatus === "succeeded";
+
+      const isExpired = sessionStatus === "expired";
+      const isFailed = sessionStatus === "failed" || paymentStatus === "failed";
+
+      let newStatus: PaymentStatus | null = null;
+      if (isCompleted) {
+        newStatus = "paid";
+      } else if (isExpired) {
+        newStatus = "expired";
+      } else if (isFailed) {
+        newStatus = "failed";
+      }
+
+      if (newStatus && newStatus !== order.payment_status) {
+        const now = new Date().toISOString();
+        const paymentId = (session.charge as any)?.payment_id || (session as any).payment_id;
+
+        await updateOrderPaymentState({
+          orderReference: order.order_reference,
+          paymentStatus: newStatus,
+          bachsPaymentId: paymentId || undefined,
+          paymentCompletedAt: newStatus === "paid" ? now : null,
+        });
+
+        return {
+          ...order,
+          payment_status: newStatus,
+          payment_completed_at: newStatus === "paid" ? now : order.payment_completed_at,
+          bachs_payment_id: paymentId || order.bachs_payment_id,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn(`Could not sync Bachs checkout session ${order.bachs_checkout_id}:`, err);
+  }
+
+  return order;
+}
+
+/**
  * Securely fetch payment status for a specific customer order
  */
 export async function getOrderPaymentStatus(
@@ -509,8 +570,13 @@ export async function getOrderPaymentStatus(
   token?: string,
   phone?: string
 ): Promise<OrderPaymentStatusResponse | null> {
-  const order = await getOrderByReferenceAndToken(reference, token, phone);
+  let order = await getOrderByReferenceAndToken(reference, token, phone);
   if (!order) return null;
+
+  // If pending and has a Bachs checkout session, sync directly with Bachs API
+  if (order.payment_status === "pending" && order.bachs_checkout_id) {
+    order = await syncOrderPaymentWithBachs(order);
+  }
 
   return {
     orderReference: order.order_reference,

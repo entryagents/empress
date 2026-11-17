@@ -25,39 +25,39 @@ export function FeaturedDishHero({
   const hasVariants = Boolean(product.variants && product.variants.length > 0);
 
   return (
-    <section className="relative overflow-hidden rounded-3xl bg-wine-950 text-ivory-50 shadow-lift border border-wine-900/40">
+    <section className="relative overflow-hidden rounded-2xl bg-wine-950 text-ivory-50 shadow-soft border border-wine-900/40">
       {/* Editorial Decorative Background Elements */}
-      <div className="absolute -top-32 -right-32 size-96 rounded-full bg-wine-800/30 blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-32 -left-32 size-96 rounded-full bg-champagne-500/10 blur-3xl pointer-events-none" />
+      <div className="absolute -top-32 -right-32 size-72 rounded-full bg-wine-800/20 blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-32 -left-32 size-72 rounded-full bg-champagne-500/10 blur-3xl pointer-events-none" />
 
-      <div className="relative grid items-center lg:grid-cols-12 gap-8 p-6 sm:p-10 lg:p-12">
+      <div className="relative grid items-center lg:grid-cols-12 gap-6 p-5 sm:p-7 lg:p-8">
         {/* LEFT / CONTENT: Editorial Typography */}
-        <div className="lg:col-span-6 space-y-6">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="eyebrow flex items-center gap-2 rounded-full bg-champagne-500/20 px-3.5 py-1 text-xs text-champagne-300 border border-champagne-400/30">
+        <div className="lg:col-span-7 space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="eyebrow flex items-center gap-1.5 rounded-full bg-champagne-500/20 px-3 py-0.5 text-[0.7rem] font-semibold text-champagne-300 border border-champagne-400/30">
               <Sparkles className="size-3 text-champagne-400" />
               Chef&apos;s Signature Spotlight
             </span>
-            <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-ivory-200 backdrop-blur-xs">
+            <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-[0.7rem] text-ivory-200">
               {product.category?.name}
             </span>
           </div>
 
-          <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-light tracking-tight leading-[1.05] text-white">
+          <h2 className="font-serif text-2xl sm:text-3xl lg:text-3xl font-light tracking-tight text-white">
             {product.name}
           </h2>
 
-          <p className="max-w-xl text-base sm:text-lg leading-relaxed text-ivory-200/80 font-light">
+          <p className="max-w-xl text-xs sm:text-sm leading-relaxed text-ivory-200/85 font-light line-clamp-2">
             {product.full_description || product.short_description}
           </p>
 
           {/* Pricing & Prep Details */}
-          <div className="flex flex-wrap items-center gap-6 border-y border-white/10 py-4">
+          <div className="flex flex-wrap items-center gap-5 border-y border-white/10 py-3">
             <div>
-              <span className="block text-[0.65rem] uppercase tracking-wider text-champagne-400">
+              <span className="block text-[0.6rem] uppercase tracking-wider text-champagne-400">
                 Culinary Price
               </span>
-              <span className="font-serif text-3xl sm:text-4xl font-bold tracking-tight text-white">
+              <span className="font-serif text-2xl sm:text-3xl font-bold tracking-tight text-white">
                 {formatKobo(product.base_price_kobo)}
               </span>
             </div>
@@ -131,8 +131,8 @@ export function FeaturedDishHero({
         </div>
 
         {/* RIGHT / VISUAL: High-resolution Food Frame */}
-        <div className="lg:col-span-6 relative">
-          <div className="relative aspect-4/3 sm:aspect-16/10 lg:aspect-square w-full overflow-hidden rounded-2xl border border-white/15 shadow-2xl">
+        <div className="lg:col-span-5 relative">
+          <div className="relative aspect-4/3 sm:aspect-16/10 lg:aspect-4/3 w-full overflow-hidden rounded-xl border border-white/15 shadow-xl">
             <FoodImage
               name={product.slug}
               src={primaryImg}

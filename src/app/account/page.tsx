@@ -1,14 +1,16 @@
+import { redirect } from "next/navigation";
 import { getCurrentCustomer } from "@/lib/customer/service";
-import { ProfileForm } from "./profile-form";
 
 export const instant = false;
 
-
 export const metadata = {
-  title: "Profile Details | Empress Delicacies",
+  title: "My Account | Empress Delicacies",
 };
 
-export default async function AccountProfilePage() {
-  const { profile, user } = await getCurrentCustomer();
-  return <ProfileForm profile={profile} email={user?.email || ""} />;
+export default async function AccountPage() {
+  const { user } = await getCurrentCustomer();
+  if (!user) {
+    redirect("/auth/login");
+  }
+  redirect("/account/orders");
 }

@@ -343,17 +343,12 @@ export function CheckoutClient({ deliveryZones, customer, savedAddresses = [] }:
               ))}
 
               <form id="checkout-form" onSubmit={handleSubmitCheckout} className="space-y-6">
-                {/* 1. Customer Information */}
+                {/* 1. Contact & Receipt Information */}
                 <div className="rounded-[2px] border border-wine-900/10 bg-white p-6 shadow-soft">
-                  <div className="flex items-center justify-between border-b border-wine-900/10 pb-2">
+                  <div className="border-b border-wine-900/10 pb-2">
                     <h2 className="font-serif text-lg font-medium text-wine-950">
-                      1. Customer Information
+                      1. Contact &amp; Receipt Delivery
                     </h2>
-                    {customer && (
-                      <span className="rounded bg-champagne-500/15 px-2 py-0.5 text-[0.65rem] font-semibold text-champagne-800 border border-champagne-500/30">
-                        Signed In: {customer.email}
-                      </span>
-                    )}
                   </div>
                   <div className="mt-4 space-y-4">
                     <div>

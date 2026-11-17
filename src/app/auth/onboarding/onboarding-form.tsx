@@ -13,7 +13,7 @@ interface OnboardingFormProps {
 export function OnboardingForm({ initialEmail, initialName }: OnboardingFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTarget = searchParams?.get("redirect") || "/account";
+  const redirectTarget = searchParams?.get("redirect") || "/menu";
 
   const [fullName, setFullName] = useState(initialName || "");
   const [username, setUsername] = useState("");

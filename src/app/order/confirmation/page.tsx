@@ -33,6 +33,12 @@ async function ConfirmationDataLoader({ searchParams }: OrderConfirmationPagePro
       isToken ? token : undefined,
       !isToken ? token : undefined
     );
+
+    // If order was retrieved and is pending, sync directly with Bachs API
+    if (initialOrder && initialOrder.payment_status === "pending" && initialOrder.bachs_checkout_id) {
+      const { syncOrderPaymentWithBachs } = await import("@/lib/payment/service");
+      initialOrder = await syncOrderPaymentWithBachs(initialOrder);
+    }
   }
 
   return <OrderConfirmationClient initialOrder={initialOrder} initialRef={ref} initialToken={token} />;

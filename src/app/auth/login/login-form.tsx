@@ -10,7 +10,7 @@ import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTarget = searchParams?.get("redirect") || "/account";
+  const redirectTarget = searchParams?.get("redirect") || "/menu";
   const isCheckoutRedirect = redirectTarget === "/order";
 
   const [email, setEmail] = useState("");

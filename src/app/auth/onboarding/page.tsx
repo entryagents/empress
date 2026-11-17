@@ -19,7 +19,7 @@ async function OnboardingDataLoader({ searchParams }: Props) {
   await connection();
   const user = await getSessionUser();
   const params = searchParams ? await searchParams : {};
-  const redirectTarget = params.redirect || "/account";
+  const redirectTarget = params.redirect || "/menu";
 
   if (!user) {
     redirect(`/auth/login${params.redirect ? `?redirect=${encodeURIComponent(params.redirect)}` : ""}`);
