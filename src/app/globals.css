@@ -65,4 +65,6 @@ body {
   }
   .hairline { border-color: color-mix(in oklab, currentColor 22%, transparent); }
   .container-x { margin-inline: auto; width: 100%; max-width: 88rem; padding-inline: clamp(1.25rem, 4vw, 4rem); }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }
